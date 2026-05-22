@@ -28,6 +28,8 @@
 	let containerWidth = $state(0);
 	/** @type {Element | null} */
 	let plotSvg = $state(null);
+	/** @type {Element[] | null} */
+	let facetSvgs = $state(null);
 
 	const OUTCOME_ORDER = [
 		'adopted (unanimity)',
@@ -66,6 +68,16 @@
 		const month = String((n % 12) + 1).padStart(2, '0');
 		return `${year}-${month}`;
 	}
+
+	const chartTitle = $derived.by(() => {
+		const startYear = 1946 + Math.floor(fromMonth / 12);
+		const endYear = 1946 + Math.floor(toMonth / 12);
+		const range = startYear === endYear ? String(startYear) : `${startYear}–${endYear}`;
+		const unitLabel = unit === 'count' ? 'Number' : 'Share (%)';
+		const stepLabel = timeStep === 'annual' ? 'annual' : 'monthly';
+		const typeLabel = chartType === 'separated' ? ', own baselines' : '';
+		return `${unitLabel} of UNSC votes by outcome, ${range} (${stepLabel}${typeLabel})`;
+	});
 
 	const aggregated = $derived.by(() => {
 		const fyM = monthToYM(fromMonth);
@@ -117,6 +129,7 @@
 		const data = aggregated;
 		if (!w || data.length === 0) {
 			plotSvg = null;
+			facetSvgs = null;
 			return;
 		}
 
@@ -170,6 +183,7 @@
 		if (ct === 'stacked' && u === 'count') {
 			// Bidirectional bars: adopted → positive (up), non-adopted → negative (down)
 			// rectY + interval donne une échelle quantitative → xMarks adaptatifs disponibles
+			facetSvgs = null;
 			const ADOPTED = new Set(['adopted (unanimity)', 'adopted (majority)']);
 			const barData = data.map((d) => ({ ...d, v: ADOPTED.has(d.outcome) ? d.count : -d.count }));
 
@@ -180,7 +194,7 @@
 				marginBottom: 36,
 				style: { fontFamily: 'inherit', fontSize: '12px' },
 				x: { type: xType, label: null },
-				y: { label: '← votes' },
+				y: { label: 'votes' },
 				color: { domain: colorDomain, range: colorRange },
 				marks: [
 					gridY,
@@ -193,7 +207,8 @@
 							x: xFn,
 							y: 'v',
 							fill: 'outcome',
-							interval: xInterval
+							interval: xInterval,
+							inset: 0
 						})
 					),
 					Plot.ruleY([0])
@@ -201,6 +216,7 @@
 			});
 		} else if (ct === 'stacked') {
 			// Stacked area — percent mode only
+			facetSvgs = null;
 			plotSvg = Plot.plot({
 				width: w,
 				height: 500,
@@ -209,7 +225,7 @@
 				style: { fontFamily: 'inherit', fontSize: '12px' },
 				x: { type: xType, label: null },
 				y: {
-					label: null,
+					label: '% of votes',
 					percent: true,
 					tickFormat: (/** @type {number} */ d) => `${(d * 100).toFixed(0)}%`
 				},
@@ -233,57 +249,87 @@
 				]
 			});
 		} else {
-			// Separated: one area per outcome, own baseline, faceted by outcome
+			// Separated: un Plot par outcome, hauteur proportionnelle au max local
+			// → même pixels/unité sur tous les facets (échelle commune), mais chaque
+			//   facet n'affiche que la plage dont il a besoin
 			const yKey = u === 'count' ? 'count' : 'pct';
-			const labelDomain = OUTCOME_ORDER.map((o) => OUTCOME_LABELS_FULL[o]);
-			plotSvg = Plot.plot({
-				width: w,
-				height: 540,
-				marginLeft: 50,
-				marginRight: 160,
-				marginBottom: 36,
-				style: { fontFamily: 'inherit', fontSize: '12px' },
-				x: { type: xType, label: null },
-				y: {
-					label: u === 'count' ? '← votes' : null,
-					tickFormat: u === 'percent' ? (/** @type {number} */ d) => `${d.toFixed(0)}%` : ','
-				},
-				fy: { domain: labelDomain, label: null },
-				color: { domain: colorDomain, range: colorRange },
-				marks: [
-					gridY,
-					axisY,
-					...xMarks,
-					...(u === 'count'
-						? [
-								Plot.rectY(data, {
+
+			const MARGIN_TOP = 20;
+			const MARGIN_BOTTOM_SMALL = 4;
+			const MARGIN_BOTTOM_AXIS = 36;
+			const BASE_HEIGHT = 200; // hauteur de référence pour le facet au max global
+			const scaleHeight = BASE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM_SMALL;
+
+			const localMaxMap = new Map(
+				OUTCOME_ORDER.map((o) => [
+					o,
+					Math.max(0, ...data.filter((d) => d.outcome === o).map((d) => d[yKey]))
+				])
+			);
+			const globalMax = Math.max(...localMaxMap.values());
+
+			plotSvg = null;
+			if (globalMax === 0) {
+				facetSvgs = null;
+				return;
+			}
+
+			facetSvgs = OUTCOME_ORDER.map((outcome, i) => {
+				const isLast = i === OUTCOME_ORDER.length - 1;
+				const mb = isLast ? MARGIN_BOTTOM_AXIS : MARGIN_BOTTOM_SMALL;
+				const lmax = localMaxMap.get(outcome) ?? 0;
+				const h = Math.max(
+					MARGIN_TOP + mb + 20,
+					Math.round((lmax / globalMax) * scaleHeight) + MARGIN_TOP + mb
+				);
+				const outcomeData = data.filter((d) => d.outcome === outcome);
+
+				return Plot.plot({
+					width: w,
+					height: h,
+					marginLeft: 50,
+					marginBottom: mb,
+					marginTop: MARGIN_TOP,
+					style: { fontFamily: 'inherit', fontSize: '12px' },
+					x: { type: xType, label: null },
+					y: {
+						label: null,
+						tickFormat: u === 'percent' ? (/** @type {number} */ d) => `${d.toFixed(0)}%` : ','
+					},
+					color: { domain: colorDomain, range: colorRange },
+					marks: [
+						gridY,
+						axisY,
+						...(isLast ? xMarks : []),
+						u === 'count'
+							? Plot.rectY(outcomeData, {
 									x: xFn,
 									y: yKey,
 									fill: 'outcome',
-									fy: (/** @type {AggRow} */ d) => OUTCOME_LABELS_FULL[d.outcome],
-									interval: xInterval
+									interval: xInterval,
+									inset: 0
 								})
-							]
-						: [
-								Plot.areaY(data, {
+							: Plot.areaY(outcomeData, {
 									x: xFn,
 									y: yKey,
 									fill: 'outcome',
-									fy: (/** @type {AggRow} */ d) => OUTCOME_LABELS_FULL[d.outcome],
 									curve: 'step',
 									fillOpacity: 0.85
 								}),
-								Plot.lineY(data, {
-									x: xFn,
-									y: yKey,
-									stroke: 'outcome',
-									fy: (/** @type {AggRow} */ d) => OUTCOME_LABELS_FULL[d.outcome],
-									strokeWidth: 1.5,
-									curve: 'step'
-								})
-							]),
-					Plot.ruleY([0])
-				]
+						...(u === 'percent'
+							? [
+									Plot.lineY(outcomeData, {
+										x: xFn,
+										y: yKey,
+										stroke: 'outcome',
+										strokeWidth: 1.5,
+										curve: 'step'
+									})
+								]
+							: []),
+						Plot.ruleY([0])
+					]
+				});
 			});
 		}
 	});
@@ -354,13 +400,40 @@
 	</aside>
 
 	<div class="chart-area" bind:this={wrapperEl}>
+		<h2 class="chart-title">{chartTitle}</h2>
 		{#if plotSvg}
 			<PlotComponent svgElement={plotSvg} />
+		{:else if facetSvgs}
+			<div class="facet-stack">
+				{#each OUTCOME_ORDER as outcome, i (outcome)}
+					<div class="facet-item">
+						<div class="facet-label" style="color: {OUTCOME_COLORS[outcome]}">
+							{OUTCOME_LABELS_FULL[outcome]}
+						</div>
+						<PlotComponent svgElement={facetSvgs[i]} />
+					</div>
+				{/each}
+			</div>
 		{/if}
+		<p class="chart-source">Source : UNSC Votes Since 1946 Database, v.1 (2026)</p>
 	</div>
 </div>
 
 <style>
+	.chart-title {
+		font-size: 0.95rem;
+		font-weight: 600;
+		line-height: 1.3;
+		color: var(--text);
+		margin: 0;
+	}
+
+	.chart-source {
+		font-size: 0.68rem;
+		color: var(--text-muted);
+		margin: 0;
+	}
+
 	.trends-layout {
 		display: flex;
 		gap: 2rem;
@@ -375,6 +448,20 @@
 	.chart-area {
 		flex: 1;
 		min-width: 0;
+	}
+
+	.facet-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.facet-label {
+		font-size: 0.8rem;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		line-height: 1.2;
+		padding-left: 50px;
 	}
 
 	.sidebar-section {
