@@ -1,0 +1,467 @@
+<script>
+	import * as Plot from '@observablehq/plot';
+	import RangeSlider from './RangeSlider.svelte';
+	import PlotComponent from './PlotComponent.svelte';
+
+	/**
+	 * @typedef {{ id: number, ref: string, resNum: string, date: string, year: number,
+	 *   title: string, outcome: string, yes: number, no: number,
+	 *   abstentions: number, nonVoting: number, veto: number,
+	 *   countries: Record<string, string> }} Vote
+	 */
+
+	/**
+	 * @typedef {{ period: string, x: number | Date, outcome: string, count: number, pct: number }} AggRow
+	 */
+
+	/** @type {{ votes: Vote[] }} */
+	let { votes } = $props();
+
+	let fromMonth = $state(0);
+	let toMonth = $state(959);
+	let timeStep = $state('annual');
+	let unit = $state('count');
+	let chartType = $state('stacked');
+
+	/** @type {HTMLDivElement | null} */
+	let wrapperEl = $state(null);
+	let containerWidth = $state(0);
+	/** @type {Element | null} */
+	let plotSvg = $state(null);
+
+	const OUTCOME_ORDER = [
+		'adopted (unanimity)',
+		'adopted (majority)',
+		'not adopted (lack of majority)',
+		'not adopted (veto)'
+	];
+
+	/** @type {Record<string, string>} */
+	const OUTCOME_COLORS = {
+		'adopted (unanimity)': '#6abf89',
+		'adopted (majority)': '#b5cc6a',
+		'not adopted (lack of majority)': '#e89050',
+		'not adopted (veto)': '#d94f3d'
+	};
+
+	/** @type {Record<string, string>} */
+	const OUTCOME_LABELS = {
+		'adopted (unanimity)': 'Unanimity',
+		'adopted (majority)': 'Adopted (majority)',
+		'not adopted (lack of majority)': 'Not adopted (maj.)',
+		'not adopted (veto)': 'Vetoed'
+	};
+
+	/** @type {Record<string, string>} */
+	const OUTCOME_LABELS_FULL = {
+		'adopted (unanimity)': 'Adopted (unanimity)',
+		'adopted (majority)': 'Adopted (majority)',
+		'not adopted (lack of majority)': 'Not adopted — lack of majority',
+		'not adopted (veto)': 'Not adopted — veto'
+	};
+
+	/** @param {number} n */
+	function monthToYM(n) {
+		const year = 1946 + Math.floor(n / 12);
+		const month = String((n % 12) + 1).padStart(2, '0');
+		return `${year}-${month}`;
+	}
+
+	const aggregated = $derived.by(() => {
+		const fyM = monthToYM(fromMonth);
+		const tyM = monthToYM(toMonth);
+		const step = timeStep;
+
+		const filtered = votes.filter((v) => {
+			const ym = v.date.slice(0, 7);
+			return ym >= fyM && ym <= tyM;
+		});
+
+		/** @type {Map<string, Map<string, number>>} */
+		const groups = new Map();
+		for (const v of filtered) {
+			const year = parseInt(v.date.slice(0, 4));
+			const month = parseInt(v.date.slice(5, 7));
+			const key = step === 'annual' ? String(year) : `${year}-${String(month).padStart(2, '0')}`;
+			if (!groups.has(key)) groups.set(key, new Map());
+			const g = /** @type {Map<string, number>} */ (groups.get(key));
+			g.set(v.outcome, (g.get(v.outcome) ?? 0) + 1);
+		}
+
+		/** @type {AggRow[]} */
+		const rows = [];
+		for (const [period, outcomeMap] of [...groups.entries()].sort()) {
+			const total = [...outcomeMap.values()].reduce((a, b) => a + b, 0);
+			const x = step === 'annual' ? parseInt(period) : new Date(period + '-15');
+			for (const outcome of OUTCOME_ORDER) {
+				const count = outcomeMap.get(outcome) ?? 0;
+				rows.push({ period, x, outcome, count, pct: total > 0 ? (count / total) * 100 : 0 });
+			}
+		}
+		return rows;
+	});
+
+	$effect(() => {
+		const el = wrapperEl;
+		if (!el) return;
+		containerWidth = el.offsetWidth || 600;
+		const obs = new ResizeObserver(([entry]) => {
+			containerWidth = entry.contentRect.width || 600;
+		});
+		obs.observe(el);
+		return () => obs.disconnect();
+	});
+
+	$effect(() => {
+		const w = containerWidth;
+		const data = aggregated;
+		if (!w || data.length === 0) {
+			plotSvg = null;
+			return;
+		}
+
+		const step = timeStep;
+		const u = unit;
+		const ct = chartType;
+		const colorDomain = OUTCOME_ORDER;
+		const colorRange = OUTCOME_ORDER.map((o) => OUTCOME_COLORS[o]);
+		const xFn = (/** @type {AggRow} */ d) => d.x;
+		const xType = step === 'annual' ? 'linear' : 'utc';
+		const xInterval = step === 'annual' ? 1 : 'month';
+
+		// Custom axis marks — adapted for annual (numeric) vs monthly (Date/utc)
+		const gridY = Plot.gridY({ strokeDasharray: '0.75,2', strokeOpacity: 1, insetLeft: -30 });
+		const axisY = Plot.axisY({ tickSize: 0, dy: -3, lineAnchor: 'bottom' });
+
+		// X-axis marks — adaptatifs au pas de temps ET au span du domaine :
+		//   annual, ≤ 10 ans  → label ×1 an
+		//   annual, > 10 ans  → ticks auto (d3 nice) + minor ×1 an
+		//   monthly, ≤ 5 ans  → label ×1 an + minor ×1 mois
+		//   monthly, > 5 ans  → ticks auto (d3 nice) + minor ×1 an
+		const domainYears = (toMonth - fromMonth) / 12;
+		const xMarks =
+			step === 'annual'
+				? domainYears <= 10
+					? [Plot.axisX({ interval: 1, tickSize: 10, tickPadding: 5, tickFormat: 'd' })]
+					: [
+							Plot.axisX({
+								ticks: Math.max(4, Math.round(domainYears / 8)),
+								tickSize: 10,
+								tickPadding: 5,
+								tickFormat: 'd'
+							}),
+							Plot.axisX({ interval: 1, tickSize: 5, tickFormat: () => '' })
+						]
+				: domainYears <= 5
+					? [
+							Plot.axisX({ interval: 'year', tickSize: 10, tickPadding: 5, tickFormat: '%Y' }),
+							Plot.axisX({ interval: 'month', tickSize: 5, tickFormat: () => '' })
+						]
+					: [
+							Plot.axisX({
+								ticks: Math.max(4, Math.round(domainYears / 8)),
+								tickSize: 10,
+								tickPadding: 5,
+								tickFormat: '%Y'
+							}),
+							Plot.axisX({ interval: 'year', tickSize: 5, tickFormat: () => '' })
+						];
+
+		if (ct === 'stacked' && u === 'count') {
+			// Bidirectional bars: adopted → positive (up), non-adopted → negative (down)
+			// rectY + interval donne une échelle quantitative → xMarks adaptatifs disponibles
+			const ADOPTED = new Set(['adopted (unanimity)', 'adopted (majority)']);
+			const barData = data.map((d) => ({ ...d, v: ADOPTED.has(d.outcome) ? d.count : -d.count }));
+
+			plotSvg = Plot.plot({
+				width: w,
+				height: 500,
+				marginLeft: 50,
+				marginBottom: 36,
+				style: { fontFamily: 'inherit', fontSize: '12px' },
+				x: { type: xType, label: null },
+				y: { label: '← votes' },
+				color: { domain: colorDomain, range: colorRange },
+				marks: [
+					gridY,
+					axisY,
+					...xMarks,
+					Plot.rectY(
+						barData,
+						Plot.stackY({
+							order: OUTCOME_ORDER,
+							x: xFn,
+							y: 'v',
+							fill: 'outcome',
+							interval: xInterval
+						})
+					),
+					Plot.ruleY([0])
+				]
+			});
+		} else if (ct === 'stacked') {
+			// Stacked area — percent mode only
+			plotSvg = Plot.plot({
+				width: w,
+				height: 500,
+				marginLeft: 50,
+				marginBottom: 36,
+				style: { fontFamily: 'inherit', fontSize: '12px' },
+				x: { type: xType, label: null },
+				y: {
+					label: null,
+					percent: true,
+					tickFormat: (/** @type {number} */ d) => `${(d * 100).toFixed(0)}%`
+				},
+				color: { domain: colorDomain, range: colorRange },
+				marks: [
+					axisY,
+					...xMarks,
+					Plot.areaY(
+						data,
+						Plot.stackY({
+							order: OUTCOME_ORDER,
+							offset: 'expand',
+							x: xFn,
+							y: 'count',
+							fill: 'outcome',
+							curve: 'step'
+						})
+					),
+					gridY,
+					Plot.ruleY([0])
+				]
+			});
+		} else {
+			// Separated: one area per outcome, own baseline, faceted by outcome
+			const yKey = u === 'count' ? 'count' : 'pct';
+			const labelDomain = OUTCOME_ORDER.map((o) => OUTCOME_LABELS_FULL[o]);
+			plotSvg = Plot.plot({
+				width: w,
+				height: 540,
+				marginLeft: 50,
+				marginRight: 160,
+				marginBottom: 36,
+				style: { fontFamily: 'inherit', fontSize: '12px' },
+				x: { type: xType, label: null },
+				y: {
+					label: u === 'count' ? '← votes' : null,
+					tickFormat: u === 'percent' ? (/** @type {number} */ d) => `${d.toFixed(0)}%` : ','
+				},
+				fy: { domain: labelDomain, label: null },
+				color: { domain: colorDomain, range: colorRange },
+				marks: [
+					gridY,
+					axisY,
+					...xMarks,
+					...(u === 'count'
+						? [
+								Plot.rectY(data, {
+									x: xFn,
+									y: yKey,
+									fill: 'outcome',
+									fy: (/** @type {AggRow} */ d) => OUTCOME_LABELS_FULL[d.outcome],
+									interval: xInterval
+								})
+							]
+						: [
+								Plot.areaY(data, {
+									x: xFn,
+									y: yKey,
+									fill: 'outcome',
+									fy: (/** @type {AggRow} */ d) => OUTCOME_LABELS_FULL[d.outcome],
+									curve: 'step',
+									fillOpacity: 0.85
+								}),
+								Plot.lineY(data, {
+									x: xFn,
+									y: yKey,
+									stroke: 'outcome',
+									fy: (/** @type {AggRow} */ d) => OUTCOME_LABELS_FULL[d.outcome],
+									strokeWidth: 1.5,
+									curve: 'step'
+								})
+							]),
+					Plot.ruleY([0])
+				]
+			});
+		}
+	});
+</script>
+
+<div class="trends-layout">
+	<aside class="sidebar">
+		<div class="sidebar-section">
+			<h3 class="section-label">Period</h3>
+			<RangeSlider bind:from={fromMonth} bind:to={toMonth} />
+		</div>
+
+		<div class="sidebar-section">
+			<h3 class="section-label">Time step</h3>
+			<div class="toggle-group">
+				<button
+					class="toggle-btn"
+					class:active={timeStep === 'annual'}
+					onclick={() => (timeStep = 'annual')}>Annual</button
+				>
+				<button
+					class="toggle-btn"
+					class:active={timeStep === 'monthly'}
+					onclick={() => (timeStep = 'monthly')}>Monthly</button
+				>
+			</div>
+		</div>
+
+		<div class="sidebar-section">
+			<h3 class="section-label">Unit</h3>
+			<div class="toggle-group">
+				<button class="toggle-btn" class:active={unit === 'count'} onclick={() => (unit = 'count')}
+					>Count</button
+				>
+				<button
+					class="toggle-btn"
+					class:active={unit === 'percent'}
+					onclick={() => (unit = 'percent')}>Share (%)</button
+				>
+			</div>
+		</div>
+
+		<div class="sidebar-section">
+			<h3 class="section-label">Chart type</h3>
+			<div class="toggle-group">
+				<button
+					class="toggle-btn"
+					class:active={chartType === 'stacked'}
+					onclick={() => (chartType = 'stacked')}>Stacked areas</button
+				>
+				<button
+					class="toggle-btn"
+					class:active={chartType === 'separated'}
+					onclick={() => (chartType = 'separated')}>Own bases</button
+				>
+			</div>
+		</div>
+
+		<div class="sidebar-section">
+			<h3 class="section-label">Legend</h3>
+			{#each OUTCOME_ORDER as outcome (outcome)}
+				<div class="legend-item">
+					<span class="legend-swatch" style="background:{OUTCOME_COLORS[outcome]}"></span>
+					<span class="legend-label">{OUTCOME_LABELS[outcome]}</span>
+				</div>
+			{/each}
+		</div>
+	</aside>
+
+	<div class="chart-area" bind:this={wrapperEl}>
+		{#if plotSvg}
+			<PlotComponent svgElement={plotSvg} />
+		{/if}
+	</div>
+</div>
+
+<style>
+	.trends-layout {
+		display: flex;
+		gap: 2rem;
+		align-items: flex-start;
+	}
+
+	.sidebar {
+		width: 220px;
+		flex-shrink: 0;
+	}
+
+	.chart-area {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.sidebar-section {
+		margin-bottom: 1.5rem;
+	}
+
+	.section-label {
+		font-size: 0.7rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-muted);
+		font-weight: 600;
+		margin-bottom: 0.5rem;
+	}
+
+	.toggle-group {
+		display: flex;
+		border: 1px solid var(--border-strong);
+		border-radius: 6px;
+		overflow: hidden;
+	}
+
+	.toggle-btn {
+		flex: 1;
+		padding: 0.4rem 0.4rem;
+		background: none;
+		border: none;
+		border-right: 1px solid var(--border-strong);
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		transition:
+			background 0.1s,
+			color 0.1s;
+		line-height: 1.2;
+		cursor: pointer;
+	}
+
+	.toggle-btn:last-child {
+		border-right: none;
+	}
+
+	.toggle-btn.active {
+		background: var(--accent);
+		color: white;
+		font-weight: 500;
+	}
+
+	.toggle-btn:hover:not(.active) {
+		background: var(--surface);
+		color: var(--text);
+	}
+
+	.legend-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.4rem;
+		font-size: 0.8rem;
+		color: var(--text);
+	}
+
+	.legend-swatch {
+		width: 12px;
+		height: 12px;
+		border-radius: 3px;
+		flex-shrink: 0;
+	}
+
+	@media (max-width: 768px) {
+		.trends-layout {
+			flex-direction: column;
+			gap: 1.25rem;
+		}
+
+		.sidebar {
+			width: 100%;
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 1rem;
+		}
+
+		.sidebar-section:first-child {
+			grid-column: 1 / -1;
+		}
+
+		.chart-area {
+			width: 100%;
+		}
+	}
+</style>
