@@ -21,3 +21,9 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Claude Code (config personnelle)
+.claude/settings.local.json
+.claude/memory/
+.claude/keybindings.json
+.claude/scheduled-tasks/
