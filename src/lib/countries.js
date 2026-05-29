@@ -11,15 +11,17 @@ export const P5 = [
 
 /** Overrides for names that shouldn't be derived from the raw dataset value. */
 export const COUNTRY_DISPLAY_NAMES = /** @type {Record<string, string>} */ ({
-	'RUSSIAN FEDERATION/USSR': 'Russia/USSR',
-	'UNITED KINGDOM': 'UK',
-	'UNITED STATES': 'USA',
+	'RUSSIAN FEDERATION/USSR': 'Russia /USSR',
 	"CÔTE D'IVOIRE": "Côte d'Ivoire",
 	"COTE D'IVOIRE": "Côte d'Ivoire",
-	'EGYPT / UNITED ARAB REPUBLIC': 'Egypt/UAR',
+	'EGYPT / UNITED ARAB REPUBLIC': 'Egypt /UAR',
+	'GERMANY, FEDERAL REPUBLIC OF': 'Germany, Fed. Rep. of',
+	'IRAN (ISLAMIC REPUBLIC OF)': 'Iran',
 	'LIBYAN ARAB JAMAHIRIYA': 'Libya',
-	'SAINT VINCENT AND THE GRENADINES': 'St. Vincent & the Grenadines',
+	'SAINT VINCENT AND THE GRENADINES': 'St. Vincent and the Grenadines',
+	'SRI LANKA/CEYLAN': 'Sri Lanka /Ceylan',
 	'SYRIAN ARAB REPUBLIC': 'Syria',
+	'TRINIDAD AND TOBAGO': 'Trinidad and Tobago',
 	'UNITED ARAB EMIRATES': 'Emirates (UAE)',
 	'UNITED REPUBLIC OF TANZANIA': 'Tanzania'
 });
