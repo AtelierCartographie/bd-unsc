@@ -133,6 +133,15 @@
 			const adopted = new Set(ADOPTED_KEYS);
 			const barData = data.map((d) => ({ ...d, v: adopted.has(d.outcome) ? d.count : -d.count }));
 
+			// Y labels en valeur absolue : les barres négatives restent un repère visuel,
+			// mais le signe n'a pas de sens métier ici (pas de "nombre négatif de votes").
+			const axisYAbs = Plot.axisY({
+				tickSize: 0,
+				dy: -3,
+				lineAnchor: 'bottom',
+				tickFormat: (/** @type {number} */ d) => String(Math.abs(d))
+			});
+
 			plotSvg = Plot.plot({
 				width: w,
 				height: 500,
@@ -144,7 +153,7 @@
 				color: OUTCOME_COLOR_SCALE,
 				marks: [
 					gridY,
-					axisY,
+					axisYAbs,
 					...xMarks,
 					Plot.rectY(
 						barData,
@@ -328,7 +337,7 @@
 				<button
 					class="toggle-btn"
 					class:active={chartType === 'stacked'}
-					onclick={() => (chartType = 'stacked')}>Stacked areas</button
+					onclick={() => (chartType = 'stacked')}>Stacked bars</button
 				>
 				<button
 					class="toggle-btn"
