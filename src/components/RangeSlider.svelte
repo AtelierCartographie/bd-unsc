@@ -1,58 +1,72 @@
 <script>
 	const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-	/** @type {number} */
-	const MIN = 0;
-	/** @type {number} */
-	const MAX = 959;
 
-	let { from = $bindable(MIN), to = $bindable(MAX) } = $props();
+	/** @type {{ from?: number, to?: number, granularity?: 'month' | 'year' }} */
+	let { from = $bindable(0), to = $bindable(959), granularity = 'month' } = $props();
 
-	/** @param {number} n */
-	function monthLabel(n) {
-		return `${MONTHS[n % 12]} ${1946 + Math.floor(n / 12)}`;
+	const positionMax = $derived(granularity === 'year' ? 79 : 959);
+
+	const fromPos = $derived(granularity === 'year' ? Math.floor(from / 12) : from);
+	const toPos = $derived(granularity === 'year' ? Math.floor(to / 12) : to);
+
+	/** @param {number} p */
+	function label(p) {
+		if (granularity === 'year') return String(1946 + p);
+		return `${MONTHS[p % 12]} ${1946 + Math.floor(p / 12)}`;
 	}
 
-	const fromPct = $derived(((from - MIN) / (MAX - MIN)) * 100);
-	const toPct = $derived(((to - MIN) / (MAX - MIN)) * 100);
-	// When "from" is past 70% of the range, give it higher z-index so user can still drag it leftward
-	const fromZ = $derived(from > MIN + (MAX - MIN) * 0.7 ? 4 : 2);
+	const fromPct = $derived((fromPos / positionMax) * 100);
+	const toPct = $derived((toPos / positionMax) * 100);
+	const fromZ = $derived(fromPos > positionMax * 0.7 ? 4 : 2);
 	const toZ = $derived(fromZ === 4 ? 3 : 4);
+
+	/** @param {number} p */
+	function applyFrom(p) {
+		// In year mode, allow single-year selection (from == to); in month mode keep ≥1-month gap.
+		const clamped = Math.min(p, granularity === 'year' ? toPos : toPos - 1);
+		from = granularity === 'year' ? clamped * 12 : clamped;
+	}
+
+	/** @param {number} p */
+	function applyTo(p) {
+		const clamped = Math.max(p, granularity === 'year' ? fromPos : fromPos + 1);
+		to = granularity === 'year' ? clamped * 12 + 11 : clamped;
+	}
 </script>
 
 <div class="slider-outer">
 	<div class="track-area">
 		<div class="track-bg"></div>
-		<div class="track-fill" style="left:{fromPct.toFixed(2)}%; right:{(100 - toPct).toFixed(2)}%"></div>
+		<div
+			class="track-fill"
+			style="left:{fromPct.toFixed(2)}%; right:{(100 - toPct).toFixed(2)}%"
+		></div>
 		<input
 			type="range"
-			min={MIN}
-			max={MAX}
+			min="0"
+			max={positionMax}
 			step="1"
-			value={from}
+			value={fromPos}
 			class="thumb"
 			style="z-index:{fromZ}"
-			aria-label="Start month"
-			oninput={(e) => {
-				from = Math.min(+/** @type {HTMLInputElement} */ (e.currentTarget).value, to - 1);
-			}}
+			aria-label={granularity === 'year' ? 'Start year' : 'Start month'}
+			oninput={(e) => applyFrom(+(/** @type {HTMLInputElement} */ (e.currentTarget)).value)}
 		/>
 		<input
 			type="range"
-			min={MIN}
-			max={MAX}
+			min="0"
+			max={positionMax}
 			step="1"
-			value={to}
+			value={toPos}
 			class="thumb"
 			style="z-index:{toZ}"
-			aria-label="End month"
-			oninput={(e) => {
-				to = Math.max(+/** @type {HTMLInputElement} */ (e.currentTarget).value, from + 1);
-			}}
+			aria-label={granularity === 'year' ? 'End year' : 'End month'}
+			oninput={(e) => applyTo(+(/** @type {HTMLInputElement} */ (e.currentTarget)).value)}
 		/>
 	</div>
 	<div class="labels">
-		<span>{monthLabel(from)}</span>
-		<span>{monthLabel(to)}</span>
+		<span>{label(fromPos)}</span>
+		<span>{label(toPos)}</span>
 	</div>
 </div>
 

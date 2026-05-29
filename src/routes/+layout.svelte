@@ -21,6 +21,9 @@
 	}
 
 	:global(:root) {
+		--header-height: 3.5rem;
+		--tabs-height: 2.875rem;
+
 		--background: #ffffff;
 		--surface: #f9fafb;
 		--border: #e5e7eb;
@@ -31,14 +34,14 @@
 		--accent: #1d4ed8;
 		--accent-hover: #1e40af;
 
-		--adopted-unanimity-bg: #dcfce7;
-		--adopted-unanimity-text: #14532d;
-		--adopted-majority-bg: #d1fae5;
-		--adopted-majority-text: #065f46;
-		--rejected-majority-bg: #fff7ed;
-		--rejected-majority-text: #7c2d12;
-		--rejected-veto-bg: #fee2e2;
-		--rejected-veto-text: #7f1d1d;
+		--adopted-unanimity-bg: #6abf89;
+		--adopted-unanimity-text: #fff;
+		--adopted-majority-bg: #b5cc6a;
+		--adopted-majority-text: #2d3a00;
+		--rejected-majority-bg: #e89050;
+		--rejected-majority-text: #fff;
+		--rejected-veto-bg: #d94f3d;
+		--rejected-veto-text: #fff;
 	}
 
 	:global(html) {

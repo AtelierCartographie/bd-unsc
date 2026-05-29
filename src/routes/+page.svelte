@@ -64,7 +64,7 @@
 		background: var(--background);
 		border-bottom: 1px solid var(--border);
 		position: sticky;
-		top: 3.5rem;
+		top: var(--header-height);
 		z-index: 40;
 	}
 

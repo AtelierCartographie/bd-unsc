@@ -20,6 +20,15 @@
 	let fromMonth = $state(0);
 	let toMonth = $state(959);
 	let timeStep = $state('annual');
+
+	/** @param {'annual' | 'monthly'} step */
+	function setTimeStep(step) {
+		if (step === 'annual') {
+			fromMonth = Math.floor(fromMonth / 12) * 12;
+			toMonth = Math.floor(toMonth / 12) * 12 + 11;
+		}
+		timeStep = step;
+	}
 	let unit = $state('count');
 	let chartType = $state('stacked');
 
@@ -48,9 +57,9 @@
 
 	/** @type {Record<string, string>} */
 	const OUTCOME_LABELS = {
-		'adopted (unanimity)': 'Unanimity',
+		'adopted (unanimity)': 'Adopted (unanimity)',
 		'adopted (majority)': 'Adopted (majority)',
-		'not adopted (lack of majority)': 'Not adopted (maj.)',
+		'not adopted (lack of majority)': 'Not adopted',
 		'not adopted (veto)': 'Vetoed'
 	};
 
@@ -58,9 +67,24 @@
 	const OUTCOME_LABELS_FULL = {
 		'adopted (unanimity)': 'Adopted (unanimity)',
 		'adopted (majority)': 'Adopted (majority)',
-		'not adopted (lack of majority)': 'Not adopted — lack of majority',
-		'not adopted (veto)': 'Not adopted — veto'
+		'not adopted (lack of majority)': 'Not adopted',
+		'not adopted (veto)': 'Vetoed'
 	};
+
+	const MONTH_NAMES = [
+		'Jan',
+		'Feb',
+		'Mar',
+		'Apr',
+		'May',
+		'Jun',
+		'Jul',
+		'Aug',
+		'Sep',
+		'Oct',
+		'Nov',
+		'Dec'
+	];
 
 	/** @param {number} n */
 	function monthToYM(n) {
@@ -69,10 +93,22 @@
 		return `${year}-${month}`;
 	}
 
+	/** @param {number} n */
+	function monthLabel(n) {
+		return `${MONTH_NAMES[n % 12]} ${1946 + Math.floor(n / 12)}`;
+	}
+
 	const chartTitle = $derived.by(() => {
-		const startYear = 1946 + Math.floor(fromMonth / 12);
-		const endYear = 1946 + Math.floor(toMonth / 12);
-		const range = startYear === endYear ? String(startYear) : `${startYear}–${endYear}`;
+		let range;
+		if (timeStep === 'monthly') {
+			const start = monthLabel(fromMonth);
+			const end = monthLabel(toMonth);
+			range = start === end ? start : `${start}–${end}`;
+		} else {
+			const startYear = 1946 + Math.floor(fromMonth / 12);
+			const endYear = 1946 + Math.floor(toMonth / 12);
+			range = startYear === endYear ? String(startYear) : `${startYear}–${endYear}`;
+		}
 		const unitLabel = unit === 'count' ? 'Number' : 'Share (%)';
 		const stepLabel = timeStep === 'annual' ? 'annual' : 'monthly';
 		const typeLabel = chartType === 'separated' ? ', own baselines' : '';
@@ -194,7 +230,7 @@
 				marginBottom: 36,
 				style: { fontFamily: 'inherit', fontSize: '12px' },
 				x: { type: xType, label: null },
-				y: { label: 'votes' },
+				y: { label: null },
 				color: { domain: colorDomain, range: colorRange },
 				marks: [
 					gridY,
@@ -203,7 +239,12 @@
 					Plot.rectY(
 						barData,
 						Plot.stackY({
-							order: OUTCOME_ORDER,
+							order: [
+								'adopted (majority)',
+								'adopted (unanimity)',
+								'not adopted (lack of majority)',
+								'not adopted (veto)'
+							],
 							x: xFn,
 							y: 'v',
 							fill: 'outcome',
@@ -211,11 +252,13 @@
 							inset: 0
 						})
 					),
-					Plot.ruleY([0])
+					Plot.ruleY([0], { insetLeft: -30 })
 				]
 			});
 		} else if (ct === 'stacked') {
-			// Stacked area — percent mode only
+			// Stacked bars — percent mode (normalized via offset: 'expand').
+			// rectY + interval donne des barres ancrées sur chaque période entière,
+			// ce qui évite le problème de demi-barres aux extrémités du curve: 'step'.
 			facetSvgs = null;
 			plotSvg = Plot.plot({
 				width: w,
@@ -224,16 +267,19 @@
 				marginBottom: 36,
 				style: { fontFamily: 'inherit', fontSize: '12px' },
 				x: { type: xType, label: null },
-				y: {
-					label: '% of votes',
-					percent: true,
-					tickFormat: (/** @type {number} */ d) => `${(d * 100).toFixed(0)}%`
-				},
+				y: { label: null },
 				color: { domain: colorDomain, range: colorRange },
 				marks: [
-					axisY,
+					gridY,
+					Plot.axisY({
+						tickSize: 0,
+						dy: -3,
+						lineAnchor: 'bottom',
+						tickFormat: (/** @type {number} */ d) =>
+							d >= 0.9999 ? `${(d * 100).toFixed(0)} %` : `${(d * 100).toFixed(0)}`
+					}),
 					...xMarks,
-					Plot.areaY(
+					Plot.rectY(
 						data,
 						Plot.stackY({
 							order: OUTCOME_ORDER,
@@ -241,11 +287,11 @@
 							x: xFn,
 							y: 'count',
 							fill: 'outcome',
-							curve: 'step'
+							interval: xInterval,
+							inset: 0
 						})
 					),
-					gridY,
-					Plot.ruleY([0])
+					Plot.ruleY([0], { insetLeft: -30 })
 				]
 			});
 		} else {
@@ -283,6 +329,15 @@
 					Math.round((lmax / globalMax) * scaleHeight) + MARGIN_TOP + mb
 				);
 				const outcomeData = data.filter((d) => d.outcome === outcome);
+				const facetAxisY =
+					u === 'percent'
+						? Plot.axisY({
+								tickSize: 0,
+								dy: -3,
+								lineAnchor: 'bottom',
+								tickFormat: (/** @type {number} */ d) => (d === 100 ? '100 %' : `${d.toFixed(0)}`)
+							})
+						: axisY;
 
 				return Plot.plot({
 					width: w,
@@ -294,40 +349,21 @@
 					x: { type: xType, label: null },
 					y: {
 						label: null,
-						tickFormat: u === 'percent' ? (/** @type {number} */ d) => `${d.toFixed(0)}%` : ','
+						...(u !== 'percent' && { tickFormat: ',' })
 					},
 					color: { domain: colorDomain, range: colorRange },
 					marks: [
 						gridY,
-						axisY,
+						facetAxisY,
 						...(isLast ? xMarks : []),
-						u === 'count'
-							? Plot.rectY(outcomeData, {
-									x: xFn,
-									y: yKey,
-									fill: 'outcome',
-									interval: xInterval,
-									inset: 0
-								})
-							: Plot.areaY(outcomeData, {
-									x: xFn,
-									y: yKey,
-									fill: 'outcome',
-									curve: 'step',
-									fillOpacity: 0.85
-								}),
-						...(u === 'percent'
-							? [
-									Plot.lineY(outcomeData, {
-										x: xFn,
-										y: yKey,
-										stroke: 'outcome',
-										strokeWidth: 1.5,
-										curve: 'step'
-									})
-								]
-							: []),
-						Plot.ruleY([0])
+						Plot.rectY(outcomeData, {
+							x: xFn,
+							y: yKey,
+							fill: 'outcome',
+							interval: xInterval,
+							inset: 0
+						}),
+						Plot.ruleY([0], { insetLeft: -30 })
 					]
 				});
 			});
@@ -339,7 +375,11 @@
 	<aside class="sidebar">
 		<div class="sidebar-section">
 			<h3 class="section-label">Period</h3>
-			<RangeSlider bind:from={fromMonth} bind:to={toMonth} />
+			<RangeSlider
+				bind:from={fromMonth}
+				bind:to={toMonth}
+				granularity={timeStep === 'annual' ? 'year' : 'month'}
+			/>
 		</div>
 
 		<div class="sidebar-section">
@@ -348,12 +388,12 @@
 				<button
 					class="toggle-btn"
 					class:active={timeStep === 'annual'}
-					onclick={() => (timeStep = 'annual')}>Annual</button
+					onclick={() => setTimeStep('annual')}>Annual</button
 				>
 				<button
 					class="toggle-btn"
 					class:active={timeStep === 'monthly'}
-					onclick={() => (timeStep = 'monthly')}>Monthly</button
+					onclick={() => setTimeStep('monthly')}>Monthly</button
 				>
 			</div>
 		</div>
@@ -454,6 +494,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
+		margin-top: 0.75rem;
 	}
 
 	.facet-label {
@@ -504,9 +545,9 @@
 	}
 
 	.toggle-btn.active {
-		background: var(--accent);
-		color: white;
-		font-weight: 500;
+		background: #e6edfb;
+		color: var(--accent);
+		font-weight: 600;
 	}
 
 	.toggle-btn:hover:not(.active) {

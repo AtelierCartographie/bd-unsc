@@ -42,13 +42,6 @@
 		align-items: center;
 		color: var(--text);
 		flex-shrink: 0;
-		opacity: 0.7;
-		transition: opacity 0.15s;
-	}
-
-	.logo:hover {
-		opacity: 1;
-		text-decoration: none;
 	}
 
 	h1 {

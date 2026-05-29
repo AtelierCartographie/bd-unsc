@@ -81,8 +81,23 @@
 		return { p5: p5Here, others };
 	});
 
+	const COUNTRY_DISPLAY_NAMES = /** @type {Record<string, string>} */ ({
+		'RUSSIAN FEDERATION/USSR': 'Russia/USSR',
+		'UNITED KINGDOM': 'UK',
+		'UNITED STATES': 'USA',
+		"CÔTE D'IVOIRE": "Côte d'Ivoire",
+		"COTE D'IVOIRE": "Côte d'Ivoire",
+		'EGYPT / UNITED ARAB REPUBLIC': 'Egypt/UAR',
+		'LIBYAN ARAB JAMAHIRIYA': 'Libya',
+		'SAINT VINCENT AND THE GRENADINES': 'St. Vincent & the Grenadines',
+		'SYRIAN ARAB REPUBLIC': 'Syria',
+		'UNITED ARAB EMIRATES': 'Emirates (UAE)',
+		'UNITED REPUBLIC OF TANZANIA': 'Tanzania'
+	});
+
 	/** @param {string} name */
 	function formatCountryName(name) {
+		if (name in COUNTRY_DISPLAY_NAMES) return COUNTRY_DISPLAY_NAMES[name];
 		// Capitalise first letter after start-of-string, whitespace, slash, open-paren or hyphen
 		return name.toLowerCase().replace(/(?:^|[\s/(\-])(\w)/g, (match, c) => {
 			return match.slice(0, -1) + c.toUpperCase();
@@ -113,7 +128,7 @@
 
 	let showCountryCols = $state(false);
 	let page = $state(1);
-	let perPage = $state(50);
+	let perPage = $state(10);
 	let sortBy = $state('date');
 	let sortDir = $state('desc');
 
@@ -121,13 +136,13 @@
 		{ value: 'all', label: 'All outcomes' },
 		{ value: 'adopted (unanimity)', label: 'Adopted (unanimity)' },
 		{ value: 'adopted (majority)', label: 'Adopted (majority)' },
-		{ value: 'not adopted (lack of majority)', label: 'Not adopted (no majority)' },
-		{ value: 'not adopted (veto)', label: 'Not adopted (veto)' }
+		{ value: 'not adopted (lack of majority)', label: 'Not adopted' },
+		{ value: 'not adopted (veto)', label: 'Vetoed' }
 	];
 
 	const OUTCOME_META = {
-		'adopted (unanimity)': { cls: 'badge-adopted-unanimity', short: 'Adopted' },
-		'adopted (majority)': { cls: 'badge-adopted-majority', short: 'Adopted (maj.)' },
+		'adopted (unanimity)': { cls: 'badge-adopted-unanimity', short: 'Adopted (unanimity)' },
+		'adopted (majority)': { cls: 'badge-adopted-majority', short: 'Adopted (majority)' },
 		'not adopted (lack of majority)': { cls: 'badge-rejected-majority', short: 'Not adopted' },
 		'not adopted (veto)': { cls: 'badge-rejected-veto', short: 'Vetoed' }
 	};
@@ -145,12 +160,7 @@
 			const ym = v.date.slice(0, 7);
 			if (ym < fromDateStr || ym > toDateStr) return false;
 			const q = search.trim().toLowerCase();
-			if (
-				q &&
-				!v.title.toLowerCase().includes(q) &&
-				!v.ref.toLowerCase().includes(q)
-			)
-				return false;
+			if (q && !v.title.toLowerCase().includes(q)) return false;
 			if (outcomeFilter !== 'all' && v.outcome !== outcomeFilter) return false;
 			if (selectedCountries.size > 0) {
 				const hasOne = [...selectedCountries].some((c) => c in v.countries);
@@ -160,11 +170,23 @@
 		})
 	);
 
+	const OUTCOME_RANK = {
+		'adopted (unanimity)': 0,
+		'adopted (majority)': 1,
+		'not adopted (lack of majority)': 2,
+		'not adopted (veto)': 3
+	};
+
 	const sorted = $derived(
 		[...filtered].sort((a, b) => {
 			const d = sortDir === 'asc' ? 1 : -1;
 			if (sortBy === 'date') return d * (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
 			if (sortBy === 'ref') return d * a.ref.localeCompare(b.ref);
+			if (sortBy === 'outcome') {
+				const ra = OUTCOME_RANK[/** @type {keyof typeof OUTCOME_RANK} */ (a.outcome)] ?? 99;
+				const rb = OUTCOME_RANK[/** @type {keyof typeof OUTCOME_RANK} */ (b.outcome)] ?? 99;
+				return d * (ra - rb);
+			}
 			return 0;
 		})
 	);
@@ -193,6 +215,35 @@
 		void _dep;
 		page = 1;
 	});
+
+	/** @type {HTMLDivElement | null} */
+	let tableWrapperEl = $state(null);
+	let scrollLeft = $state(0);
+	let scrollMax = $state(0);
+
+	$effect(() => {
+		if (!tableWrapperEl || !showCountryCols) {
+			scrollLeft = 0;
+			scrollMax = 0;
+			return;
+		}
+		const el = /** @type {HTMLDivElement} */ (tableWrapperEl);
+		function update() {
+			scrollLeft = el.scrollLeft;
+			scrollMax = Math.max(0, el.scrollWidth - el.clientWidth);
+		}
+		update();
+		el.addEventListener('scroll', update, { passive: true });
+		const ro = new ResizeObserver(update);
+		ro.observe(el);
+		return () => {
+			el.removeEventListener('scroll', update);
+			ro.disconnect();
+		};
+	});
+
+	const canScrollLeft = $derived(scrollLeft > 1);
+	const canScrollRight = $derived(scrollLeft < scrollMax - 1);
 
 	/** @param {string} col */
 	function toggleSort(col) {
@@ -259,8 +310,9 @@
 	<div class="browse-intro">
 		<p>
 			Explore all <strong>{votes.length.toLocaleString('en')}</strong> votes cast in the UN Security
-			Council since 1946. Filter by period, country, subject, or outcome — and follow links to the
-			official UN documentation.
+			Council since 1946.
+			<br />
+			Filter by period, country, subject, or outcome — and follow links to the official UN documentation.
 		</p>
 	</div>
 
@@ -274,7 +326,7 @@
 
 		<!-- 2. Country -->
 		<div class="filter-group">
-			<div class="filter-label">Country</div>
+			<div class="filter-label">Voting Country</div>
 			<div class="country-filter" bind:this={dropdownEl}>
 				<button
 					class="country-trigger"
@@ -283,9 +335,7 @@
 					aria-expanded={countryDropdownOpen}
 					aria-haspopup="listbox"
 				>
-					{selectedCountries.size === 0
-						? 'All countries'
-						: `${selectedCountries.size} selected`}
+					{selectedCountries.size === 0 ? 'All countries' : `${selectedCountries.size} selected`}
 					<span class="chevron" class:open={countryDropdownOpen}>&#x25BE;</span>
 				</button>
 
@@ -342,18 +392,18 @@
 
 		<!-- 3. Subject search -->
 		<div class="filter-group filter-search">
-			<label for="search" class="filter-label">Subject</label>
+			<label for="search" class="filter-label">Topic</label>
 			<input
 				id="search"
 				type="search"
-				placeholder="Search by title or document reference…"
+				placeholder="Search by title…"
 				bind:value={search}
 			/>
 		</div>
 
 		<!-- 4. Outcome -->
 		<div class="filter-group filter-outcome">
-			<label for="outcome" class="filter-label">Status</label>
+			<label for="outcome" class="filter-label">Outcome</label>
 			<select id="outcome" bind:value={outcomeFilter}>
 				{#each OUTCOMES as o (o.value)}
 					<option value={o.value}>{o.label}</option>
@@ -368,25 +418,28 @@
 
 	<!-- Table meta -->
 	<div class="table-meta">
-		<span class="results-count">
-			{#if filtered.length === votes.length}
-				{votes.length.toLocaleString('en')} votes
-			{:else}
-				<strong>{filtered.length.toLocaleString('en')}</strong> of {votes.length.toLocaleString(
-					'en'
-				)} votes
-			{/if}
-		</span>
-		<div class="table-controls">
+		<div class="table-meta-left">
+			<span class="results-count">
+				{#if filtered.length === votes.length}
+					{votes.length.toLocaleString('en')} votes
+				{:else}
+					<strong>{filtered.length.toLocaleString('en')}</strong> of {votes.length.toLocaleString(
+						'en'
+					)} votes
+				{/if}
+			</span>
 			<label class="per-page-label">
 				Show
 				<select bind:value={perPage}>
+					<option value={10}>10</option>
 					<option value={25}>25</option>
 					<option value={50}>50</option>
 					<option value={100}>100</option>
 				</select>
 				per page
 			</label>
+		</div>
+		<div class="table-controls">
 			<button
 				class="btn-toggle-countries"
 				class:active={showCountryCols}
@@ -398,14 +451,19 @@
 	</div>
 
 	<!-- Table -->
-	<div class="table-wrapper">
-		<table>
+	<div class="table-outer">
+		<div
+			class="table-wrapper"
+			class:scrollable={showCountryCols}
+			bind:this={tableWrapperEl}
+		>
+			<table>
 			<thead>
 				<tr>
-					<th class="col-ref sortable" onclick={() => toggleSort('ref')}>
-						UN Classification {sortIcon('ref')}
+					<th class="col-ref">UN classification</th>
+					<th class="col-outcome sortable" onclick={() => toggleSort('outcome')}>
+						Vote outcome {sortIcon('outcome')}
 					</th>
-					<th class="col-outcome">Vote outcome</th>
 					<th class="col-date sortable" onclick={() => toggleSort('date')}>
 						Date {sortIcon('date')}
 					</th>
@@ -470,6 +528,11 @@
 				{/each}
 			</tbody>
 		</table>
+		</div>
+		{#if showCountryCols}
+			<div class="edge-shadow edge-shadow-left" class:visible={canScrollLeft} aria-hidden="true"></div>
+			<div class="edge-shadow edge-shadow-right" class:visible={canScrollRight} aria-hidden="true"></div>
+		{/if}
 	</div>
 
 	<!-- Pagination -->
@@ -520,7 +583,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 1rem;
-		align-items: flex-end;
+		align-items: flex-start;
 		padding: 1.25rem;
 		background: var(--surface);
 		border: 1px solid var(--border);
@@ -723,7 +786,9 @@
 		background: var(--background);
 		color: var(--text-muted);
 		font-size: 0.875rem;
-		transition: background 0.15s, color 0.15s;
+		transition:
+			background 0.15s,
+			color 0.15s;
 	}
 
 	.btn-reset:hover {
@@ -741,6 +806,12 @@
 		color: var(--text-muted);
 		flex-wrap: wrap;
 		gap: 0.5rem;
+	}
+
+	.table-meta-left {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
 	}
 
 	.table-controls {
@@ -766,17 +837,17 @@
 
 	.btn-toggle-countries {
 		padding: 0.35rem 0.75rem;
-		border: 1px solid var(--border-strong);
+		border: 1px solid #c5d5f5;
 		border-radius: 6px;
-		background: var(--background);
-		color: var(--text-muted);
+		background: #e6edfb;
+		color: var(--accent);
 		font-size: 0.8rem;
 		transition: all 0.15s;
 	}
 
 	.btn-toggle-countries:hover {
-		background: var(--surface);
-		color: var(--text);
+		background: #d0dff9;
+		color: var(--accent);
 	}
 
 	.btn-toggle-countries.active {
@@ -786,10 +857,67 @@
 	}
 
 	/* ── Table ── */
+	.table-outer {
+		position: relative;
+	}
+
 	.table-wrapper {
-		overflow-x: auto;
 		border: 1px solid var(--border);
 		border-radius: 8px;
+	}
+
+	.edge-shadow {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 28px;
+		pointer-events: none;
+		opacity: 0;
+		transition: opacity 0.18s ease;
+		z-index: 4;
+	}
+
+	.edge-shadow.visible {
+		opacity: 1;
+	}
+
+	.edge-shadow-left {
+		left: 0;
+		background: linear-gradient(to right, rgba(0, 0, 0, 0.14), transparent);
+		border-radius: 8px 0 0 8px;
+	}
+
+	.edge-shadow-right {
+		right: 0;
+		background: linear-gradient(to left, rgba(0, 0, 0, 0.14), transparent);
+		border-radius: 0 8px 8px 0;
+	}
+
+	.table-wrapper.scrollable {
+		overflow: auto;
+		max-height: calc(100vh - var(--header-height) - var(--tabs-height) - 6rem);
+
+		scrollbar-width: thin;
+		scrollbar-color: var(--border-strong) var(--surface);
+	}
+
+	.table-wrapper.scrollable::-webkit-scrollbar {
+		height: 12px;
+		width: 12px;
+	}
+	.table-wrapper.scrollable::-webkit-scrollbar-track {
+		background: var(--surface);
+	}
+	.table-wrapper.scrollable::-webkit-scrollbar-thumb {
+		background: var(--border-strong);
+		border-radius: 6px;
+	}
+	.table-wrapper.scrollable::-webkit-scrollbar-thumb:hover {
+		background: var(--text-muted);
+	}
+
+	.table-wrapper.scrollable thead {
+		top: 0;
 	}
 
 	table {
@@ -801,6 +929,9 @@
 	thead {
 		background: var(--surface);
 		border-bottom: 1px solid var(--border);
+		position: sticky;
+		top: calc(var(--header-height) + var(--tabs-height));
+		z-index: 1;
 	}
 
 	th {
@@ -808,8 +939,6 @@
 		text-align: left;
 		font-weight: 600;
 		font-size: 0.75rem;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
 		color: var(--text-muted);
 		white-space: nowrap;
 	}
@@ -891,6 +1020,15 @@
 		font-weight: 600;
 		white-space: nowrap;
 		padding: 0.5rem 0.4rem;
+	}
+
+	th.col-country {
+		white-space: normal;
+		/* word-break: break-word; */
+		overflow-wrap: break-word;
+		vertical-align: bottom;
+		line-height: 1.2;
+		text-align: left;
 	}
 
 	.col-p5 {
