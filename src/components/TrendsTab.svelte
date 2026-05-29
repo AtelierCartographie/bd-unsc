@@ -2,23 +2,23 @@
 	import * as Plot from '@observablehq/plot';
 	import RangeSlider from './RangeSlider.svelte';
 	import PlotComponent from './PlotComponent.svelte';
+	import { MONTH_MIN, MONTH_MAX, monthToYM, monthLabel, monthToYear } from '$lib/time.js';
+	import {
+		OUTCOME_ORDER,
+		OUTCOME_COLORS,
+		OUTCOME_LABELS,
+		ADOPTED_KEYS
+	} from '$lib/outcomes.js';
+	import { PLOT_STYLE, PLOT_MARGIN_LEFT, OUTCOME_COLOR_SCALE, buildXMarks } from '$lib/plot.js';
 
-	/**
-	 * @typedef {{ id: number, ref: string, resNum: string, date: string, year: number,
-	 *   title: string, outcome: string, yes: number, no: number,
-	 *   abstentions: number, nonVoting: number, veto: number,
-	 *   countries: Record<string, string> }} Vote
-	 */
-
-	/**
-	 * @typedef {{ period: string, x: number | Date, outcome: string, count: number, pct: number }} AggRow
-	 */
+	/** @typedef {import('$lib/types.js').Vote} Vote */
+	/** @typedef {import('$lib/types.js').AggRow} AggRow */
 
 	/** @type {{ votes: Vote[] }} */
 	let { votes } = $props();
 
-	let fromMonth = $state(0);
-	let toMonth = $state(959);
+	let fromMonth = $state(MONTH_MIN);
+	let toMonth = $state(MONTH_MAX);
 	let timeStep = $state('annual');
 
 	/** @param {'annual' | 'monthly'} step */
@@ -40,64 +40,6 @@
 	/** @type {Element[] | null} */
 	let facetSvgs = $state(null);
 
-	const OUTCOME_ORDER = [
-		'adopted (unanimity)',
-		'adopted (majority)',
-		'not adopted (lack of majority)',
-		'not adopted (veto)'
-	];
-
-	/** @type {Record<string, string>} */
-	const OUTCOME_COLORS = {
-		'adopted (unanimity)': '#6abf89',
-		'adopted (majority)': '#b5cc6a',
-		'not adopted (lack of majority)': '#e89050',
-		'not adopted (veto)': '#d94f3d'
-	};
-
-	/** @type {Record<string, string>} */
-	const OUTCOME_LABELS = {
-		'adopted (unanimity)': 'Adopted (unanimity)',
-		'adopted (majority)': 'Adopted (majority)',
-		'not adopted (lack of majority)': 'Not adopted',
-		'not adopted (veto)': 'Vetoed'
-	};
-
-	/** @type {Record<string, string>} */
-	const OUTCOME_LABELS_FULL = {
-		'adopted (unanimity)': 'Adopted (unanimity)',
-		'adopted (majority)': 'Adopted (majority)',
-		'not adopted (lack of majority)': 'Not adopted',
-		'not adopted (veto)': 'Vetoed'
-	};
-
-	const MONTH_NAMES = [
-		'Jan',
-		'Feb',
-		'Mar',
-		'Apr',
-		'May',
-		'Jun',
-		'Jul',
-		'Aug',
-		'Sep',
-		'Oct',
-		'Nov',
-		'Dec'
-	];
-
-	/** @param {number} n */
-	function monthToYM(n) {
-		const year = 1946 + Math.floor(n / 12);
-		const month = String((n % 12) + 1).padStart(2, '0');
-		return `${year}-${month}`;
-	}
-
-	/** @param {number} n */
-	function monthLabel(n) {
-		return `${MONTH_NAMES[n % 12]} ${1946 + Math.floor(n / 12)}`;
-	}
-
 	const chartTitle = $derived.by(() => {
 		let range;
 		if (timeStep === 'monthly') {
@@ -105,8 +47,8 @@
 			const end = monthLabel(toMonth);
 			range = start === end ? start : `${start}–${end}`;
 		} else {
-			const startYear = 1946 + Math.floor(fromMonth / 12);
-			const endYear = 1946 + Math.floor(toMonth / 12);
+			const startYear = monthToYear(fromMonth);
+			const endYear = monthToYear(toMonth);
 			range = startYear === endYear ? String(startYear) : `${startYear}–${endYear}`;
 		}
 		const unitLabel = unit === 'count' ? 'Number' : 'Share (%)';
@@ -126,6 +68,7 @@
 		});
 
 		/** @type {Map<string, Map<string, number>>} */
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local aggregation map, not reactive state
 		const groups = new Map();
 		for (const v of filtered) {
 			const year = parseInt(v.date.slice(0, 4));
@@ -172,66 +115,33 @@
 		const step = timeStep;
 		const u = unit;
 		const ct = chartType;
-		const colorDomain = OUTCOME_ORDER;
-		const colorRange = OUTCOME_ORDER.map((o) => OUTCOME_COLORS[o]);
 		const xFn = (/** @type {AggRow} */ d) => d.x;
 		const xType = step === 'annual' ? 'linear' : 'utc';
 		const xInterval = step === 'annual' ? 1 : 'month';
 
-		// Custom axis marks — adapted for annual (numeric) vs monthly (Date/utc)
+		// Shared y-axis marks — adapted for annual (numeric) vs monthly (Date/utc)
 		const gridY = Plot.gridY({ strokeDasharray: '0.75,2', strokeOpacity: 1, insetLeft: -30 });
 		const axisY = Plot.axisY({ tickSize: 0, dy: -3, lineAnchor: 'bottom' });
 
-		// X-axis marks — adaptatifs au pas de temps ET au span du domaine :
-		//   annual, ≤ 10 ans  → label ×1 an
-		//   annual, > 10 ans  → ticks auto (d3 nice) + minor ×1 an
-		//   monthly, ≤ 5 ans  → label ×1 an + minor ×1 mois
-		//   monthly, > 5 ans  → ticks auto (d3 nice) + minor ×1 an
-		const domainYears = (toMonth - fromMonth) / 12;
-		const xMarks =
-			step === 'annual'
-				? domainYears <= 10
-					? [Plot.axisX({ interval: 1, tickSize: 10, tickPadding: 5, tickFormat: 'd' })]
-					: [
-							Plot.axisX({
-								ticks: Math.max(4, Math.round(domainYears / 8)),
-								tickSize: 10,
-								tickPadding: 5,
-								tickFormat: 'd'
-							}),
-							Plot.axisX({ interval: 1, tickSize: 5, tickFormat: () => '' })
-						]
-				: domainYears <= 5
-					? [
-							Plot.axisX({ interval: 'year', tickSize: 10, tickPadding: 5, tickFormat: '%Y' }),
-							Plot.axisX({ interval: 'month', tickSize: 5, tickFormat: () => '' })
-						]
-					: [
-							Plot.axisX({
-								ticks: Math.max(4, Math.round(domainYears / 8)),
-								tickSize: 10,
-								tickPadding: 5,
-								tickFormat: '%Y'
-							}),
-							Plot.axisX({ interval: 'year', tickSize: 5, tickFormat: () => '' })
-						];
+		// Adaptive x-axis marks (see buildXMarks in $lib/plot.js)
+		const xMarks = buildXMarks(/** @type {'annual' | 'monthly'} */ (step), fromMonth, toMonth);
 
 		if (ct === 'stacked' && u === 'count') {
 			// Bidirectional bars: adopted → positive (up), non-adopted → negative (down)
 			// rectY + interval donne une échelle quantitative → xMarks adaptatifs disponibles
 			facetSvgs = null;
-			const ADOPTED = new Set(['adopted (unanimity)', 'adopted (majority)']);
-			const barData = data.map((d) => ({ ...d, v: ADOPTED.has(d.outcome) ? d.count : -d.count }));
+			const adopted = new Set(ADOPTED_KEYS);
+			const barData = data.map((d) => ({ ...d, v: adopted.has(d.outcome) ? d.count : -d.count }));
 
 			plotSvg = Plot.plot({
 				width: w,
 				height: 500,
-				marginLeft: 50,
+				marginLeft: PLOT_MARGIN_LEFT,
 				marginBottom: 36,
-				style: { fontFamily: 'inherit', fontSize: '12px' },
+				style: PLOT_STYLE,
 				x: { type: xType, label: null },
 				y: { label: null },
-				color: { domain: colorDomain, range: colorRange },
+				color: OUTCOME_COLOR_SCALE,
 				marks: [
 					gridY,
 					axisY,
@@ -263,12 +173,12 @@
 			plotSvg = Plot.plot({
 				width: w,
 				height: 500,
-				marginLeft: 50,
+				marginLeft: PLOT_MARGIN_LEFT,
 				marginBottom: 36,
-				style: { fontFamily: 'inherit', fontSize: '12px' },
+				style: PLOT_STYLE,
 				x: { type: xType, label: null },
 				y: { label: null },
-				color: { domain: colorDomain, range: colorRange },
+				color: OUTCOME_COLOR_SCALE,
 				marks: [
 					gridY,
 					Plot.axisY({
@@ -342,16 +252,16 @@
 				return Plot.plot({
 					width: w,
 					height: h,
-					marginLeft: 50,
+					marginLeft: PLOT_MARGIN_LEFT,
 					marginBottom: mb,
 					marginTop: MARGIN_TOP,
-					style: { fontFamily: 'inherit', fontSize: '12px' },
+					style: PLOT_STYLE,
 					x: { type: xType, label: null },
 					y: {
 						label: null,
 						...(u !== 'percent' && { tickFormat: ',' })
 					},
-					color: { domain: colorDomain, range: colorRange },
+					color: OUTCOME_COLOR_SCALE,
 					marks: [
 						gridY,
 						facetAxisY,
@@ -448,7 +358,7 @@
 				{#each OUTCOME_ORDER as outcome, i (outcome)}
 					<div class="facet-item">
 						<div class="facet-label" style="color: {OUTCOME_COLORS[outcome]}">
-							{OUTCOME_LABELS_FULL[outcome]}
+							{OUTCOME_LABELS[outcome]}
 						</div>
 						<PlotComponent svgElement={facetSvgs[i]} />
 					</div>

@@ -32,7 +32,6 @@
 		--text-muted: #6b7280;
 		--text-faint: #9ca3af;
 		--accent: #1d4ed8;
-		--accent-hover: #1e40af;
 
 		--adopted-unanimity-bg: #6abf89;
 		--adopted-unanimity-text: #fff;
