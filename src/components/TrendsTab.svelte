@@ -2,7 +2,7 @@
 	import * as Plot from '@observablehq/plot';
 	import RangeSlider from './RangeSlider.svelte';
 	import PlotComponent from './PlotComponent.svelte';
-	import { MONTH_MIN, MONTH_MAX, monthToYM, monthLabel, monthToYear } from '$lib/time.js';
+	import { MONTHS, MONTH_MIN, MONTH_MAX, monthToYM, monthLabel, monthToYear } from '$lib/time.js';
 	import {
 		OUTCOME_ORDER,
 		OUTCOME_COLORS,
@@ -126,6 +126,32 @@
 		// Adaptive x-axis marks (see buildXMarks in $lib/plot.js)
 		const xMarks = buildXMarks(/** @type {'annual' | 'monthly'} */ (step), fromMonth, toMonth);
 
+		// Reader-facing tooltip — explicit, named channels (Period / Outcome / Votes /
+		// Share) instead of the raw x1/x2/y stacking channels. Spread into each mark.
+		const fmtPeriod = (/** @type {AggRow} */ d) =>
+			step === 'annual'
+				? d.period
+				: `${MONTHS[Number(d.period.slice(5, 7)) - 1]} ${d.period.slice(0, 4)}`;
+		const tipOptions = {
+			channels: {
+				Period: { value: fmtPeriod },
+				Outcome: { value: (/** @type {AggRow} */ d) => OUTCOME_LABELS[d.outcome] },
+				Votes: { value: (/** @type {AggRow} */ d) => d.count },
+				Share: { value: (/** @type {AggRow} */ d) => `${d.pct.toFixed(1)} %` }
+			},
+			tip: {
+				format: {
+					x: false,
+					x1: false,
+					x2: false,
+					y: false,
+					y1: false,
+					y2: false,
+					fill: false
+				}
+			}
+		};
+
 		if (ct === 'stacked' && u === 'count') {
 			// Bidirectional bars: adopted → positive (up), non-adopted → negative (down)
 			// rectY + interval donne une échelle quantitative → xMarks adaptatifs disponibles
@@ -168,7 +194,8 @@
 							y: 'v',
 							fill: 'outcome',
 							interval: xInterval,
-							inset: 0
+							inset: 0,
+							...tipOptions
 						})
 					),
 					Plot.ruleY([0], { insetLeft: -30 })
@@ -207,7 +234,8 @@
 							y: 'count',
 							fill: 'outcome',
 							interval: xInterval,
-							inset: 0
+							inset: 0,
+							...tipOptions
 						})
 					),
 					Plot.ruleY([0], { insetLeft: -30 })
@@ -280,7 +308,8 @@
 							y: yKey,
 							fill: 'outcome',
 							interval: xInterval,
-							inset: 0
+							inset: 0,
+							...tipOptions
 						}),
 						Plot.ruleY([0], { insetLeft: -30 })
 					]
