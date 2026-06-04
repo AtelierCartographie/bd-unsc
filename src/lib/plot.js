@@ -27,34 +27,37 @@ export const OUTCOME_COLOR_SCALE = {
  * @param {'annual' | 'monthly'} step
  * @param {number} fromMonth
  * @param {number} toMonth
+ * @param {'top' | 'bottom'} [anchor] — which edge to draw the axis on (default: Plot's own default, i.e. bottom)
  */
-export function buildXMarks(step, fromMonth, toMonth) {
+export function buildXMarks(step, fromMonth, toMonth, anchor) {
 	const domainYears = (toMonth - fromMonth) / 12;
 	if (step === 'annual') {
 		return domainYears <= 10
-			? [Plot.axisX({ interval: 1, tickSize: 10, tickPadding: 5, tickFormat: 'd' })]
+			? [Plot.axisX({ anchor, interval: 1, tickSize: 10, tickPadding: 5, tickFormat: 'd' })]
 			: [
 					Plot.axisX({
+						anchor,
 						ticks: Math.max(4, Math.round(domainYears / 8)),
 						tickSize: 10,
 						tickPadding: 5,
 						tickFormat: 'd'
 					}),
-					Plot.axisX({ interval: 1, tickSize: 5, tickFormat: () => '' })
+					Plot.axisX({ anchor, interval: 1, tickSize: 5, tickFormat: () => '' })
 				];
 	}
 	return domainYears <= 5
 		? [
-				Plot.axisX({ interval: 'year', tickSize: 10, tickPadding: 5, tickFormat: '%Y' }),
-				Plot.axisX({ interval: 'month', tickSize: 5, tickFormat: () => '' })
+				Plot.axisX({ anchor, interval: 'year', tickSize: 10, tickPadding: 5, tickFormat: '%Y' }),
+				Plot.axisX({ anchor, interval: 'month', tickSize: 5, tickFormat: () => '' })
 			]
 		: [
 				Plot.axisX({
+					anchor,
 					ticks: Math.max(4, Math.round(domainYears / 8)),
 					tickSize: 10,
 					tickPadding: 5,
 					tickFormat: '%Y'
 				}),
-				Plot.axisX({ interval: 'year', tickSize: 5, tickFormat: () => '' })
+				Plot.axisX({ anchor, interval: 'year', tickSize: 5, tickFormat: () => '' })
 			];
 }

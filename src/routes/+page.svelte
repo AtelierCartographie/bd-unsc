@@ -3,6 +3,7 @@
 	import Footer from '../components/Footer.svelte';
 	import BrowseTab from '../components/BrowseTab.svelte';
 	import TrendsTab from '../components/TrendsTab.svelte';
+	import CompareTab from '../components/CompareTab.svelte';
 
 	let { data } = $props();
 
@@ -44,11 +45,7 @@
 		{:else if activeTab === 'trends'}
 			<TrendsTab votes={data.votes ?? []} />
 		{:else}
-			<div class="placeholder">
-				<p class="placeholder-icon">🗳️</p>
-				<h2>Compare States' votes</h2>
-				<p>Per-country vote breakdowns — coming soon.</p>
-			</div>
+			<CompareTab votes={data.votes ?? []} />
 		{/if}
 	</div>
 </main>
@@ -100,28 +97,6 @@
 		max-width: 1400px;
 		margin: 0 auto;
 		padding: 2rem;
-	}
-
-	.placeholder {
-		padding: 5rem 2rem;
-		text-align: center;
-		color: var(--text-muted);
-	}
-
-	.placeholder-icon {
-		font-size: 3rem;
-		margin-bottom: 1rem;
-	}
-
-	.placeholder h2 {
-		font-size: 1.25rem;
-		font-weight: 600;
-		color: var(--text);
-		margin-bottom: 0.5rem;
-	}
-
-	.placeholder p {
-		font-size: 0.95rem;
 	}
 
 	@media (max-width: 768px) {
