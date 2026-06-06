@@ -11,7 +11,6 @@
 		VOTE_ORDER,
 		VOTE_COLORS,
 		VOTE_LABELS,
-		VOTE_SHORT_LABELS,
 		VOTE_COLOR_SCALE,
 		OPPOSITION_KEYS,
 		classifyVote
@@ -30,7 +29,7 @@
 
 	// Default selection keeps the opening chart light: the P5 plus the five
 	// most-active elected members (by total votes across the whole dataset).
-	// Clearing the picker still falls back to "all countries".
+	// "Reset" in the picker returns to exactly this set (creator's remark #5).
 	function defaultSelection() {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local count map, not reactive state
 		const counts = new Map();
@@ -44,14 +43,17 @@
 			.map(([c]) => c);
 		return new Set([...P5.filter((c) => counts.has(c)), ...topElected]);
 	}
-	let selectedCountries = $state(/** @type {Set<string>} */ (defaultSelection()));
+	const initialSelection = defaultSelection();
+	let selectedCountries = $state(/** @type {Set<string>} */ (new Set(initialSelection)));
 
-	// ── Chart controls ──
-	let chartType = $state('total'); // 'total' | 'chrono'
-	let chronoMode = $state('all'); // 'all' | 'opposition' (chrono only)
+	// ── Chart controls (chronological only — the proportional-square "Total"
+	// view was retired) ──
+	let chronoMode = $state('all'); // 'all' | 'opposition'
 	let sortMode = $state('total'); // 'total' | 'alpha' | 'bertin'
-	let timeStep = $state('annual'); // 'monthly' | 'annual' (chrono only)
+	let timeStep = $state('annual'); // 'monthly' | 'annual'
 	let showTable = $state(false); // matching-resolutions table (when a search is active)
+
+	const OPP_SET = new Set(OPPOSITION_KEYS);
 
 	/** @param {'annual' | 'monthly'} step */
 	function setTimeStep(step) {
@@ -132,12 +134,13 @@
 
 			for (const country in v.countries) {
 				if (!show.has(country)) continue;
+				const cat = classifyVote(v.countries[country], country, v.outcome);
+				if (cat === null) continue; // unrecorded historical vote — dropped
 				let s = map.get(country);
 				if (!s) {
 					s = { total: 0, gravSum: 0, gravN: 0, oppGravSum: 0, oppGravN: 0, byCat: {}, byPeriod: new Map() };
 					map.set(country, s);
 				}
-				const cat = classifyVote(v.countries[country], country, v.outcome);
 				s.total += 1;
 				s.gravSum += monthIdx;
 				s.gravN += 1;
@@ -157,21 +160,48 @@
 		return map;
 	});
 
-	// Country facet order, per the chosen sort.
+	// Council membership per YEAR, derived from the *full* dataset (period range
+	// only, ignoring the topic search). UNSC terms run over full calendar years
+	// (elected members serve Jan 1 → Dec 31), so a country "sat" in year Y if it
+	// has any recorded vote that year. Resolving membership at the year level —
+	// even in monthly mode — avoids mistaking a quiet month (no resolution at
+	// all) for an absence, which would wrongly shade the permanent members.
+	const membership = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local map of sets, not reactive state
+		const map = new Map();
+		for (const v of votes) {
+			const ym = v.date.slice(0, 7);
+			if (ym < fromDateStr || ym > toDateStr) continue;
+			const year = v.date.slice(0, 4);
+			for (const c in v.countries) {
+				let set = map.get(c);
+				if (!set) {
+					set = new Set();
+					map.set(c, set);
+				}
+				set.add(year);
+			}
+		}
+		return map;
+	});
+
+	// Country facet order, per the chosen sort. In "opposition only" mode,
+	// countries that never opposed have nothing to show — drop them so the
+	// chart isn't padded with empty rows (creator's remark #13).
 	const sortedCountries = $derived.by(() => {
-		const list = [...stats.keys()];
 		const s = stats;
+		let list = [...s.keys()];
+		if (chronoMode === 'opposition') list = list.filter((c) => (s.get(c)?.oppGravN ?? 0) > 0);
 		const mode = sortMode;
 		const byName = (/** @type {string} */ a, /** @type {string} */ b) =>
 			formatCountryName(a).localeCompare(formatCountryName(b));
 		if (mode === 'alpha') return list.sort(byName);
 		if (mode === 'bertin') {
 			// Centre of gravity: mean month-index of a country's votes. Ascending →
-			// countries that voted earliest in the period appear first (top).
-			// In the "opposition only" chrono view, base it on opposition votes only
-			// so the diagonal reflects the timing of dissent (countries that never
-			// opposed fall to the bottom).
-			const useOpp = chartType === 'chrono' && chronoMode === 'opposition';
+			// countries that voted earliest in the period appear first (top). In the
+			// "opposition only" view, base it on opposition votes only so the diagonal
+			// reflects the timing of dissent.
+			const useOpp = chronoMode === 'opposition';
 			const grav = (/** @type {CountryStat | undefined} */ st) => {
 				if (!st) return Infinity;
 				const sum = useOpp ? st.oppGravSum : st.gravSum;
@@ -186,7 +216,7 @@
 
 	const chartTitle = $derived.by(() => {
 		let range;
-		if (chartType === 'chrono' && timeStep === 'monthly') {
+		if (timeStep === 'monthly') {
 			const start = monthLabel(fromMonth);
 			const end = monthLabel(toMonth);
 			range = start === end ? start : `${start}–${end}`;
@@ -194,9 +224,6 @@
 			const a = monthToYear(fromMonth);
 			const b = monthToYear(toMonth);
 			range = a === b ? String(a) : `${a}–${b}`;
-		}
-		if (chartType === 'total') {
-			return `Individual votes by State, total over ${range}`;
 		}
 		const variant = chronoMode === 'opposition' ? 'opposition only' : 'all votes';
 		const stepLabel = timeStep === 'annual' ? 'annual' : 'monthly';
@@ -209,18 +236,19 @@
 	let containerWidth = $state(0);
 	/** @type {Element | null} */
 	let plotSvg = $state(null);
-	let hiddenCount = $state(0); // countries dropped by the facet cap
+	/** @type {HTMLDivElement | null} */
+	let matchTableEl = $state(null);
 
-	// Both charts facet by country; cap the row count so a very wide selection
-	// can't produce an unreadably tall (or slow) chart. The country filter is the
-	// way to look beyond the cap (and the note below says how many are hidden).
-	const MAX_FACETS = 50;
+	function revealTable() {
+		showTable = true;
+		// Wait for the table to render before scrolling to it.
+		requestAnimationFrame(() => matchTableEl?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+	}
 
 	// Emphasise the permanent members: bold any label whose text is a P5 display
-	// name. Done by post-processing the SVG so it works for both the faceted
-	// (axis-drawn) and the manual (text-mark) country labels.
+	// name. Done by post-processing the SVG so it works for the manual
+	// (text-mark) country labels.
 	const P5_DISPLAY = new Set(P5.map(formatCountryName));
-	const OPP_SET = new Set(OPPOSITION_KEYS);
 	/** @param {Element} svg */
 	function markP5Labels(svg) {
 		for (const t of svg.querySelectorAll('text')) {
@@ -243,126 +271,12 @@
 
 	$effect(() => {
 		const w = containerWidth;
-		const order = sortedCountries;
+		const shown = sortedCountries;
 		const s = stats;
-		const type = chartType;
+		const mem = membership;
 
-		if (!w || order.length === 0) {
+		if (!w || shown.length === 0) {
 			plotSvg = null;
-			hiddenCount = 0;
-			return;
-		}
-
-		const shown = order.slice(0, MAX_FACETS);
-		hiddenCount = order.length - shown.length;
-
-		if (type === 'total') {
-			// Proportional-square matrix: rows = countries, columns = vote
-			// categories. Square area ∝ number of votes (one shared size scale, so
-			// squares are comparable across countries); squares are bottom-aligned
-			// on a per-row baseline so they sit on a common line, value above.
-			//
-			// Everything is positioned in pixel space (identity x/y scales) so the
-			// squares are truly square and can be aligned to their baseline.
-			const cats = VOTE_ORDER;
-			const ncat = cats.length;
-			const LEFT = 150;
-			const RIGHT = 16;
-			const ROW_H = 62;
-			const HEADER = 30; // top band for the column labels
-			const BOTTOM_PAD = 8; // gap between baseline and row bottom
-			const H = HEADER + shown.length * ROW_H + 12;
-			const colW = (w - LEFT - RIGHT) / ncat;
-			const MAX_SIDE = Math.max(8, Math.min(colW - 14, ROW_H - 24));
-
-			/** @type {{ country: string, category: string, count: number }[]} */
-			const data = [];
-			let globalMax = 0;
-			for (const country of shown) {
-				const byCat = s.get(country)?.byCat ?? {};
-				for (const cat of cats) {
-					const count = byCat[cat] ?? 0;
-					if (count > globalMax) globalMax = count;
-					if (count > 0) data.push({ country, category: cat, count });
-				}
-			}
-			if (globalMax === 0) {
-				plotSvg = null;
-				return;
-			}
-
-			const rowIndex = new Map(shown.map((c, i) => [c, i]));
-			const catIndex = new Map(cats.map((c, i) => [c, i]));
-			const cx = (/** @type {string} */ cat) => LEFT + colW * (catIndex.get(cat) + 0.5);
-			const baseY = (/** @type {string} */ country) =>
-				HEADER + (rowIndex.get(country) ?? 0) * ROW_H + (ROW_H - BOTTOM_PAD);
-			const sideOf = (/** @type {number} */ count) => Math.sqrt(count / globalMax) * MAX_SIDE;
-			const rows = shown.map((country) => ({ country, name: formatCountryName(country) }));
-
-			const svg = Plot.plot({
-				width: w,
-				height: H,
-				marginLeft: 0,
-				marginRight: 0,
-				marginTop: 0,
-				marginBottom: 0,
-				style: PLOT_STYLE,
-				x: { domain: [0, w], range: [0, w], axis: null },
-				y: { domain: [0, H], range: [0, H], axis: null },
-				color: VOTE_COLOR_SCALE,
-				marks: [
-					// Per-row baseline the squares rest on (overhangs slightly left).
-					Plot.ruleY(shown, {
-						y: (/** @type {string} */ c) => baseY(c),
-						x1: LEFT - 30,
-						x2: w - RIGHT,
-						stroke: 'var(--border-strong)',
-						strokeWidth: 1
-					}),
-					// Squares, bottom-aligned on the baseline.
-					Plot.rect(data, {
-						x1: (/** @type {any} */ d) => cx(d.category) - sideOf(d.count) / 2,
-						x2: (/** @type {any} */ d) => cx(d.category) + sideOf(d.count) / 2,
-						y1: (/** @type {any} */ d) => baseY(d.country) - sideOf(d.count),
-						y2: (/** @type {any} */ d) => baseY(d.country),
-						fill: 'category',
-						channels: {
-							Country: { value: (/** @type {any} */ d) => formatCountryName(d.country) },
-							Vote: { value: (/** @type {any} */ d) => VOTE_LABELS[d.category] },
-							Votes: { value: (/** @type {any} */ d) => d.count }
-						},
-						tip: { format: { x1: false, x2: false, y1: false, y2: false, fill: false } }
-					}),
-					// Value above each square.
-					Plot.text(data, {
-						x: (/** @type {any} */ d) => cx(d.category),
-						y: (/** @type {any} */ d) => baseY(d.country) - sideOf(d.count) - 6,
-						text: (/** @type {any} */ d) => d.count.toLocaleString('en'),
-						fill: 'var(--text-muted)',
-						fontSize: 10
-					}),
-					// Column header (category short labels).
-					Plot.text(cats, {
-						x: (/** @type {string} */ c) => cx(c),
-						y: 14,
-						text: (/** @type {string} */ c) => VOTE_SHORT_LABELS[c],
-						fontWeight: 600,
-						fontSize: 12
-					}),
-					// Country labels, aligned with each row's baseline (P5 emphasised
-					// by markP5Labels below).
-					Plot.text(rows, {
-						x: LEFT - 8,
-						y: (/** @type {any} */ d) => baseY(d.country),
-						dy: -2,
-						text: (/** @type {any} */ d) => d.name,
-						textAnchor: 'end',
-						fontSize: 12
-					})
-				]
-			});
-			markP5Labels(svg);
-			plotSvg = svg;
 			return;
 		}
 
@@ -409,6 +323,33 @@
 			return;
 		}
 
+		// Symmetric-ish y extent from the stacked sums, so the absence bands span
+		// the full row height and the axis ticks can be forced to integers
+		// (creator's remark #10 — "you can't cast half a vote").
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local maps, not reactive state
+		const posSum = new Map();
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local maps, not reactive state
+		const negSum = new Map();
+		for (const d of data) {
+			const k = `${d.country}|${d.period}`;
+			if (d.v >= 0) posSum.set(k, (posSum.get(k) ?? 0) + d.v);
+			else negSum.set(k, (negSum.get(k) ?? 0) + d.v);
+		}
+		let yMax = 0;
+		let yMin = 0;
+		for (const val of posSum.values()) if (val > yMax) yMax = val;
+		for (const val of negSum.values()) if (val < yMin) yMin = val;
+		yMax = Math.max(0, Math.ceil(yMax));
+		yMin = Math.min(0, Math.floor(yMin));
+
+		const maxAbs = Math.max(1, yMax, -yMin);
+		const tickStep = Math.max(1, Math.round(maxAbs / 2));
+		/** @type {number[]} */
+		const yTicks = [];
+		for (let t = 0; t <= yMax + 1e-9; t += tickStep) yTicks.push(t);
+		for (let t = -tickStep; t >= yMin - 1e-9; t -= tickStep) yTicks.push(t);
+		yTicks.sort((a, b) => a - b);
+
 		const ROW_H = 80;
 		const marginTop = 26;
 		const marginBottom = 28;
@@ -418,6 +359,42 @@
 			step === 'annual'
 				? [monthToYear(fromMonth), monthToYear(toMonth) + 1]
 				: [new Date(monthToYM(fromMonth) + '-01'), new Date(monthToYM(toMonth + 1) + '-01')];
+
+		// Absence bands: contiguous spans where a country was not on the council.
+		const monthDate = (/** @type {number} */ m) => new Date(monthToYM(m) + '-01');
+		/** @type {{ country: string, x1: any, x2: any }[]} */
+		const bands = [];
+		if (step === 'annual') {
+			const y0 = monthToYear(fromMonth);
+			const y1 = monthToYear(toMonth);
+			for (const c of shown) {
+				const sit = mem.get(c);
+				let start = null;
+				for (let y = y0; y <= y1; y++) {
+					const absent = !sit || !sit.has(String(y));
+					if (absent && start === null) start = y;
+					if (!absent && start !== null) {
+						bands.push({ country: c, x1: start, x2: y });
+						start = null;
+					}
+				}
+				if (start !== null) bands.push({ country: c, x1: start, x2: y1 + 1 });
+			}
+		} else {
+			for (const c of shown) {
+				const sit = mem.get(c);
+				let start = null;
+				for (let m = fromMonth; m <= toMonth; m++) {
+					const absent = !sit || !sit.has(String(monthToYear(m)));
+					if (absent && start === null) start = m;
+					if (!absent && start !== null) {
+						bands.push({ country: c, x1: monthDate(start), x2: monthDate(m) });
+						start = null;
+					}
+				}
+				if (start !== null) bands.push({ country: c, x1: monthDate(start), x2: monthDate(toMonth + 1) });
+			}
+		}
 
 		const tipOptions = {
 			channels: {
@@ -440,17 +417,27 @@
 			marginBottom,
 			style: PLOT_STYLE,
 			x: { type: xType, domain: xDomain, label: null },
-			y: { label: null },
+			y: { domain: [yMin, yMax], label: null },
 			fy: { domain: shown, label: null, axis: null },
 			color: VOTE_COLOR_SCALE,
 			marks: [
-				Plot.gridY({ strokeDasharray: '0.75,2', strokeOpacity: 1, insetLeft: -30 }),
+				// Faint grey background over the periods a country did not sit.
+				Plot.rect(bands, {
+					fy: 'country',
+					x1: 'x1',
+					x2: 'x2',
+					y1: yMin,
+					y2: yMax,
+					fill: '#ededf0',
+					pointerEvents: 'none'
+				}),
+				Plot.gridY({ ticks: yTicks, strokeDasharray: '0.75,2', strokeOpacity: 1, insetLeft: -30 }),
 				Plot.axisY({
 					anchor: 'left',
 					tickSize: 0,
 					dy: -3,
 					lineAnchor: 'bottom',
-					ticks: 3,
+					ticks: yTicks,
 					tickFormat: (/** @type {number} */ d) => String(Math.abs(d))
 				}),
 				...buildXMarks(/** @type {'annual' | 'monthly'} */ (step), fromMonth, toMonth, 'top'),
@@ -470,12 +457,15 @@
 				),
 				Plot.ruleY([0], { insetLeft: -30 }),
 				// Country label, aligned with the baseline (y = 0) of each facet.
+				// lineWidth wraps long names onto a second line (creator's remark #10).
 				Plot.text(shown, {
 					fy: (/** @type {string} */ c) => c,
 					x: xDomain[0],
 					y: 0,
 					text: (/** @type {string} */ c) => formatCountryName(c),
 					textAnchor: 'end',
+					lineAnchor: 'bottom',
+					lineWidth: 11,
 					dx: -40,
 					dy: -2,
 					fontSize: 12
@@ -494,13 +484,17 @@
 			<RangeSlider
 				bind:from={fromMonth}
 				bind:to={toMonth}
-				granularity={chartType === 'chrono' && timeStep === 'annual' ? 'year' : 'month'}
+				granularity={timeStep === 'annual' ? 'year' : 'month'}
 			/>
 		</div>
 
 		<div class="sidebar-section">
 			<h3 class="section-label">Voting country</h3>
-			<CountryMultiSelect available={availableCountries} bind:selected={selectedCountries} />
+			<CountryMultiSelect
+				available={availableCountries}
+				bind:selected={selectedCountries}
+				defaultSelected={initialSelection}
+			/>
 		</div>
 
 		<div class="sidebar-section">
@@ -514,58 +508,44 @@
 			/>
 			<p class="filter-feedback">
 				{filtered.length.toLocaleString('en')} of {votes.length.toLocaleString('en')} votes
+				{#if search.trim()}
+					<br />
+					<button type="button" class="inline-link" onclick={revealTable}>see the list below</button>
+				{/if}
 			</p>
 		</div>
 
 		<div class="sidebar-section">
-			<h3 class="section-label">Chart</h3>
+			<h3 class="section-label">Votes shown</h3>
 			<div class="toggle-group">
 				<button
 					class="toggle-btn"
-					class:active={chartType === 'total'}
-					onclick={() => (chartType = 'total')}>Total</button
+					class:active={chronoMode === 'all'}
+					onclick={() => (chronoMode = 'all')}>All</button
 				>
 				<button
 					class="toggle-btn"
-					class:active={chartType === 'chrono'}
-					onclick={() => (chartType = 'chrono')}>Chronological</button
+					class:active={chronoMode === 'opposition'}
+					onclick={() => (chronoMode = 'opposition')}>Opposition only</button
 				>
 			</div>
 		</div>
 
-		{#if chartType === 'chrono'}
-			<div class="sidebar-section">
-				<h3 class="section-label">Votes shown</h3>
-				<div class="toggle-group">
-					<button
-						class="toggle-btn"
-						class:active={chronoMode === 'all'}
-						onclick={() => (chronoMode = 'all')}>All</button
-					>
-					<button
-						class="toggle-btn"
-						class:active={chronoMode === 'opposition'}
-						onclick={() => (chronoMode = 'opposition')}>Opposition only</button
-					>
-				</div>
+		<div class="sidebar-section">
+			<h3 class="section-label">Time step</h3>
+			<div class="toggle-group">
+				<button
+					class="toggle-btn"
+					class:active={timeStep === 'annual'}
+					onclick={() => setTimeStep('annual')}>Annual</button
+				>
+				<button
+					class="toggle-btn"
+					class:active={timeStep === 'monthly'}
+					onclick={() => setTimeStep('monthly')}>Monthly</button
+				>
 			</div>
-
-			<div class="sidebar-section">
-				<h3 class="section-label">Time step</h3>
-				<div class="toggle-group">
-					<button
-						class="toggle-btn"
-						class:active={timeStep === 'annual'}
-						onclick={() => setTimeStep('annual')}>Annual</button
-					>
-					<button
-						class="toggle-btn"
-						class:active={timeStep === 'monthly'}
-						onclick={() => setTimeStep('monthly')}>Monthly</button
-					>
-				</div>
-			</div>
-		{/if}
+		</div>
 
 		<div class="sidebar-section">
 			<h3 class="section-label">Sort countries</h3>
@@ -591,33 +571,33 @@
 		<div class="sidebar-section">
 			<h3 class="section-label">Legend</h3>
 			{#each VOTE_ORDER as cat (cat)}
-				{#if chartType !== 'chrono' || chronoMode !== 'opposition' || OPPOSITION_KEYS.includes(cat)}
+				{#if chronoMode !== 'opposition' || OPPOSITION_KEYS.includes(cat)}
 					<div class="legend-item">
 						<span class="legend-swatch" style="background:{VOTE_COLORS[cat]}"></span>
 						<span class="legend-label">{VOTE_LABELS[cat]}</span>
 					</div>
 				{/if}
 			{/each}
+			<div class="legend-item">
+				<span class="legend-swatch legend-swatch-absence"></span>
+				<span class="legend-label">Not on the council</span>
+			</div>
 		</div>
 	</aside>
 
 	<div class="chart-area" bind:this={wrapperEl}>
 		<h2 class="chart-title">{chartTitle}</h2>
-		{#if hiddenCount > 0}
-			<p class="chrono-note">
-				Showing the first {Math.min(sortedCountries.length, MAX_FACETS)} countries by the current sort.
-				{hiddenCount} more are hidden — narrow the country filter to see them.
-			</p>
-		{/if}
 		{#if plotSvg}
-			<PlotComponent svgElement={plotSvg} />
+			<div class="chart-scroll">
+				<PlotComponent svgElement={plotSvg} />
+			</div>
 		{:else}
 			<p class="empty-msg">No votes match the current filters.</p>
 		{/if}
 		<p class="chart-source">Source : UNSC Votes Since 1946 Database, v.1 (2026)</p>
 
 		{#if search.trim()}
-			<div class="match-table">
+			<div class="match-table" bind:this={matchTableEl}>
 				<button class="match-toggle" onclick={() => (showTable = !showTable)}>
 					{showTable ? 'Hide' : 'Show'} matching resolutions ({filtered.length.toLocaleString(
 						'en'
@@ -641,6 +621,11 @@
 	.sidebar {
 		width: 220px;
 		flex-shrink: 0;
+		/* Stick the controls in view while the (potentially tall) chart scrolls
+		   with the page — keeps "scroll if needed" without an inner overflow
+		   container that would clip the Plot tooltips. */
+		position: sticky;
+		top: calc(var(--header-height) + 3rem);
 	}
 
 	.chart-area {
@@ -656,6 +641,12 @@
 		margin: 0 0 0.5rem;
 	}
 
+	/* The chart grows with the number of countries and scrolls with the page.
+	   An inline <svg> clips to its bounds by default; let tooltips spill out. */
+	.chart-scroll :global(svg) {
+		overflow: visible;
+	}
+
 	.chart-source {
 		font-size: 0.68rem;
 		color: var(--text-muted);
@@ -668,16 +659,21 @@
 		padding: 2rem 0;
 	}
 
-	.chrono-note {
-		font-size: 0.75rem;
-		color: var(--text-muted);
-		margin: 0 0 0.5rem;
-	}
-
 	.filter-feedback {
 		margin: 0.4rem 0 0;
 		font-size: 0.72rem;
 		color: var(--text-muted);
+	}
+
+	.inline-link {
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--accent);
+		font-size: inherit;
+		font-weight: 600;
+		text-decoration: underline;
+		cursor: pointer;
 	}
 
 	.match-table {
@@ -797,6 +793,10 @@
 		border: 1px solid rgba(0, 0, 0, 0.08);
 	}
 
+	.legend-swatch-absence {
+		background: #ededf0;
+	}
+
 	@media (max-width: 768px) {
 		.compare-layout {
 			flex-direction: column;
@@ -808,6 +808,7 @@
 			display: grid;
 			grid-template-columns: 1fr 1fr;
 			gap: 1rem;
+			position: static;
 		}
 
 		.sidebar-section:first-child {

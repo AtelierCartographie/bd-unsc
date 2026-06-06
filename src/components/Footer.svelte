@@ -8,19 +8,17 @@
 	<div class="footer-inner">
 		<div class="footer-bottom">
 			<p>
-				<!-- Created by <a
-          href="https://github.com/TomBor"
-          target="_blank"
-          rel="noopener">Thomas Ansart</a
-        > -->
-				—
 				<a href="https://www.sciencespo.fr/cartographie/" target="_blank" rel="noopener"
 					>Atelier de cartographie de Sciences Po</a
 				>
 			</p>
 
 			<p class="footer-license">
-				ISC License — {yearRange}
+				Database licensed
+				<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">
+					CC BY 4.0
+				</a>
+				· Interface code ISC — {yearRange}
 			</p>
 		</div>
 	</div>

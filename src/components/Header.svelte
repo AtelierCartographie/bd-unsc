@@ -32,12 +32,17 @@
 		margin: 0 auto;
 		padding: 0 2rem;
 		height: 3.5rem;
-		display: flex;
+		/* logo left, title centred across the full header width (the empty third
+		   column balances the logo). */
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
 		align-items: center;
-		gap: 2rem;
+		gap: 1rem;
 	}
 
 	.logo {
+		grid-column: 1;
+		justify-self: start;
 		display: flex;
 		align-items: center;
 		color: var(--text);
@@ -45,6 +50,8 @@
 	}
 
 	h1 {
+		grid-column: 2;
+		text-align: center;
 		font-size: 1rem;
 		font-weight: 600;
 		color: var(--text);
@@ -52,12 +59,22 @@
 	}
 
 	@media (max-width: 640px) {
-		h1 {
-			font-size: 0.875rem;
-		}
+		/* Back to a simple left-aligned flow: centring a long title next to the
+		   logo is too cramped on narrow screens. */
 		.header-inner {
-			padding: 0 1rem;
+			display: flex;
+			align-items: center;
 			gap: 1rem;
+			padding: 0 1rem;
+		}
+
+		.logo {
+			flex-shrink: 0;
+		}
+
+		h1 {
+			text-align: left;
+			font-size: 0.875rem;
 		}
 	}
 </style>

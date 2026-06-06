@@ -1,8 +1,14 @@
 <script>
 	import { P5, formatCountryName } from '$lib/countries.js';
 
-	/** @type {{ available: Set<string>, selected?: Set<string> }} */
-	let { available, selected = $bindable(new Set()) } = $props();
+	/**
+	 * @type {{
+	 *   available: Set<string>,
+	 *   selected?: Set<string>,
+	 *   defaultSelected?: Set<string> | null
+	 * }}
+	 */
+	let { available, selected = $bindable(new Set()), defaultSelected = null } = $props();
 
 	let open = $state(false);
 	let search = $state('');
@@ -49,8 +55,10 @@
 		selected = new Set(available);
 	}
 
-	function clear() {
-		selected = new Set();
+	// "Reset" restores the caller's default selection when one is provided
+	// (Compare tab); otherwise it clears to an empty set (Browse tab).
+	function reset() {
+		selected = defaultSelected ? new Set(defaultSelected) : new Set();
 	}
 </script>
 
@@ -78,7 +86,7 @@
 			</div>
 			<div class="dropdown-actions">
 				<button onclick={selectAll}>Select all</button>
-				<button onclick={clear}>Clear</button>
+				<button onclick={reset}>{defaultSelected ? 'Reset' : 'Clear'}</button>
 			</div>
 			<div class="country-list" role="listbox" aria-multiselectable="true">
 				{#if groups.p5.length > 0}

@@ -445,6 +445,23 @@
 		margin-top: 0.75rem;
 	}
 
+	.facet-item {
+		/* Lift the hovered facet so a tooltip overflowing a short facet (e.g.
+		   "Vetoed") paints above the neighbouring facets instead of being hidden
+		   behind them. */
+		position: relative;
+	}
+
+	.facet-item:hover {
+		z-index: 5;
+	}
+
+	/* An inline <svg> clips to its bounds by default (overflow: hidden); a short
+	   facet would otherwise truncate a tooltip that doesn't fit. Let it spill. */
+	.facet-item :global(svg) {
+		overflow: visible;
+	}
+
 	.facet-label {
 		font-size: 0.8rem;
 		font-weight: 700;

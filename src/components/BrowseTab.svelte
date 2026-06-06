@@ -84,7 +84,7 @@
 			Explore all <strong>{votes.length.toLocaleString('en')}</strong> votes cast in the UN Security
 			Council since 1946.
 			<br />
-			Filter by period, country, subject, or outcome — and follow links to the official UN documentation.
+			Filter by period, country, topic, or outcome — and follow links to the official UN documentation.
 		</p>
 	</div>
 
@@ -210,18 +210,32 @@
 		color: var(--text);
 	}
 
-	/* Responsive */
+	/* Responsive: switch the flex row to a two-column grid — the Period slider
+	   spans the full width (it needs the room), the other filters sit two per
+	   row. */
 	@media (max-width: 768px) {
 		.filters {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 0.85rem 0.75rem;
 			padding: 0.875rem;
-			gap: 0.75rem;
+			align-items: end;
+		}
+		.filter-group {
+			min-width: 0;
 		}
 		.filter-period {
-			min-width: 0;
+			grid-column: 1 / -1;
+			width: auto;
+		}
+		/* Make every control fill its grid cell so the two columns stay even. */
+		.filter-search input,
+		.filter-outcome select,
+		.filters :global(.country-trigger) {
 			width: 100%;
 		}
-		.filter-search {
-			min-width: 0;
+		.btn-reset {
+			align-self: end;
 		}
 	}
 </style>
