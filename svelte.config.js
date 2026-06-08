@@ -11,7 +11,7 @@ const config = {
 			fallback: 'index.html'
 		}),
 		paths: {
-			relative: true
+			base: process.env.BASE_PATH ?? ''
 		},
 		version: {
 			pollInterval: 0
