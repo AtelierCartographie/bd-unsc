@@ -4,6 +4,7 @@
 	import RangeSlider from './RangeSlider.svelte';
 	import CountryMultiSelect from './CountryMultiSelect.svelte';
 	import PlotComponent from './PlotComponent.svelte';
+	import ChartExport from './ChartExport.svelte';
 	import VotesTable from './VotesTable.svelte';
 	import { MONTHS, MONTH_MIN, MONTH_MAX, monthToYM, monthLabel, monthToYear } from '$lib/time.js';
 	import { P5, formatCountryName } from '$lib/countries.js';
@@ -15,7 +16,7 @@
 		OPPOSITION_KEYS,
 		classifyVote
 	} from '$lib/votes-individual.js';
-	import { PLOT_STYLE, buildXMarks } from '$lib/plot.js';
+	import { PLOT_STYLE, buildXMarks, CHART_SOURCE } from '$lib/plot.js';
 
 	/** @typedef {import('$lib/types.js').Vote} Vote */
 
@@ -176,6 +177,7 @@
 			for (const c in v.countries) {
 				let set = map.get(c);
 				if (!set) {
+					// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local set, not reactive state
 					set = new Set();
 					map.set(c, set);
 				}
@@ -243,6 +245,24 @@
 		showTable = true;
 		// Wait for the table to render before scrolling to it.
 		requestAnimationFrame(() => matchTableEl?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+	}
+
+	const canExport = $derived(!!plotSvg);
+
+	// Gather the live pieces for the image export. The legend mirrors the sidebar:
+	// the (optionally filtered) vote categories plus the "not on the council" band.
+	/** @returns {import('$lib/export-chart.js').ExportData} */
+	function exportData() {
+		const legend = VOTE_ORDER.filter(
+			(cat) => chronoMode !== 'opposition' || OPPOSITION_KEYS.includes(cat)
+		).map((cat) => ({ color: VOTE_COLORS[cat], label: VOTE_LABELS[cat] }));
+		legend.push({ color: '#ededf0', label: 'Not on the council' });
+		return {
+			title: chartTitle,
+			legend,
+			charts: plotSvg ? [{ svg: /** @type {SVGSVGElement} */ (plotSvg) }] : [],
+			source: CHART_SOURCE
+		};
 	}
 
 	// Emphasise the permanent members: bold any label whose text is a P5 display
@@ -586,7 +606,10 @@
 	</aside>
 
 	<div class="chart-area" bind:this={wrapperEl}>
-		<h2 class="chart-title">{chartTitle}</h2>
+		<div class="chart-header">
+			<h2 class="chart-title">{chartTitle}</h2>
+			<ChartExport filename="unsc-compare" getData={exportData} disabled={!canExport} />
+		</div>
 		{#if plotSvg}
 			<div class="chart-scroll">
 				<PlotComponent svgElement={plotSvg} />
@@ -594,7 +617,7 @@
 		{:else}
 			<p class="empty-msg">No votes match the current filters.</p>
 		{/if}
-		<p class="chart-source">Source : UNSC Votes Since 1946 Database, v.1 (2026)</p>
+		<p class="chart-source">{CHART_SOURCE}</p>
 
 		{#if search.trim()}
 			<div class="match-table" bind:this={matchTableEl}>
@@ -633,12 +656,20 @@
 		min-width: 0;
 	}
 
+	.chart-header {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-bottom: 0.5rem;
+	}
+
 	.chart-title {
 		font-size: 0.95rem;
 		font-weight: 600;
 		line-height: 1.3;
 		color: var(--text);
-		margin: 0 0 0.5rem;
+		margin: 0;
 	}
 
 	/* The chart grows with the number of countries and scrolls with the page.

@@ -6,6 +6,9 @@ import { OUTCOME_ORDER, OUTCOME_COLORS } from './outcomes.js';
 /** Common typography passed to every `Plot.plot({ style })`. */
 export const PLOT_STYLE = { fontFamily: 'inherit', fontSize: '12px' };
 
+/** Source credit shown under every chart (and baked into exports). */
+export const CHART_SOURCE = 'Source : UNSC Votes Since 1946 Database, v.1 (2026)';
+
 /** Left margin shared by all charts (room for the y-axis labels). */
 export const PLOT_MARGIN_LEFT = 50;
 
@@ -27,7 +30,7 @@ export const OUTCOME_COLOR_SCALE = {
  * @param {'annual' | 'monthly'} step
  * @param {number} fromMonth
  * @param {number} toMonth
- * @param {'top' | 'bottom'} [anchor] — which edge to draw the axis on (default: Plot's own default, i.e. bottom)
+ * @param {'top' | 'bottom'} [anchor] - which edge to draw the axis on (default: Plot's own default, i.e. bottom)
  */
 export function buildXMarks(step, fromMonth, toMonth, anchor) {
 	const domainYears = (toMonth - fromMonth) / 12;

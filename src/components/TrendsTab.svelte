@@ -2,6 +2,7 @@
 	import * as Plot from '@observablehq/plot';
 	import RangeSlider from './RangeSlider.svelte';
 	import PlotComponent from './PlotComponent.svelte';
+	import ChartExport from './ChartExport.svelte';
 	import { MONTHS, MONTH_MIN, MONTH_MAX, monthToYM, monthLabel, monthToYear } from '$lib/time.js';
 	import {
 		OUTCOME_ORDER,
@@ -9,7 +10,13 @@
 		OUTCOME_LABELS,
 		ADOPTED_KEYS
 	} from '$lib/outcomes.js';
-	import { PLOT_STYLE, PLOT_MARGIN_LEFT, OUTCOME_COLOR_SCALE, buildXMarks } from '$lib/plot.js';
+	import {
+		PLOT_STYLE,
+		PLOT_MARGIN_LEFT,
+		OUTCOME_COLOR_SCALE,
+		buildXMarks,
+		CHART_SOURCE
+	} from '$lib/plot.js';
 
 	/** @typedef {import('$lib/types.js').Vote} Vote */
 	/** @typedef {import('$lib/types.js').AggRow} AggRow */
@@ -56,6 +63,30 @@
 		const typeLabel = chartType === 'separated' ? ', own baselines' : '';
 		return `${unitLabel} of UNSC votes by outcome, ${range} (${stepLabel}${typeLabel})`;
 	});
+
+	// facetSvgs is either null or the full outcome stack (never an empty array),
+	// so a plain truthiness check is enough — and avoids a `.length` type narrowing.
+	const canExport = $derived(!!plotSvg || !!facetSvgs);
+
+	// Gather the live pieces for the image export: the single plot, or the facet
+	// stack (each facet labelled with its outcome, indented over the plot area).
+	/** @returns {import('$lib/export-chart.js').ExportData} */
+	function exportData() {
+		const charts = plotSvg
+			? [{ svg: /** @type {SVGSVGElement} */ (plotSvg) }]
+			: (facetSvgs ?? []).map((svg, i) => ({
+					svg: /** @type {SVGSVGElement} */ (svg),
+					label: OUTCOME_LABELS[OUTCOME_ORDER[i]],
+					labelColor: OUTCOME_COLORS[OUTCOME_ORDER[i]],
+					labelIndent: PLOT_MARGIN_LEFT
+				}));
+		return {
+			title: chartTitle,
+			legend: OUTCOME_ORDER.map((o) => ({ color: OUTCOME_COLORS[o], label: OUTCOME_LABELS[o] })),
+			charts,
+			source: CHART_SOURCE
+		};
+	}
 
 	const aggregated = $derived.by(() => {
 		const fyM = monthToYM(fromMonth);
@@ -293,7 +324,7 @@
 					marginBottom: mb,
 					marginTop: MARGIN_TOP,
 					style: PLOT_STYLE,
-					x: { type: xType, label: null },
+					x: { type: xType, label: null, axis: null },
 					y: {
 						label: null,
 						...(u !== 'percent' && { tickFormat: ',' })
@@ -388,7 +419,10 @@
 	</aside>
 
 	<div class="chart-area" bind:this={wrapperEl}>
-		<h2 class="chart-title">{chartTitle}</h2>
+		<div class="chart-header">
+			<h2 class="chart-title">{chartTitle}</h2>
+			<ChartExport filename="unsc-trends" getData={exportData} disabled={!canExport} />
+		</div>
 		{#if plotSvg}
 			<PlotComponent svgElement={plotSvg} />
 		{:else if facetSvgs}
@@ -403,11 +437,19 @@
 				{/each}
 			</div>
 		{/if}
-		<p class="chart-source">Source : UNSC Votes Since 1946 Database, v.1 (2026)</p>
+		<p class="chart-source">{CHART_SOURCE}</p>
 	</div>
 </div>
 
 <style>
+	.chart-header {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-bottom: 0.25rem;
+	}
+
 	.chart-title {
 		font-size: 0.95rem;
 		font-weight: 600;
