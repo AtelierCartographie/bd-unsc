@@ -1,42 +1,37 @@
-# sv
+# UNSC Votes Since 1946
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Interface de consultation et d'analyse de la base de données des votes au Conseil de sécurité des Nations Unies depuis 1946.
 
-## Creating a project
+## Contenu
 
-If you're seeing this, you've probably already done this step. Congrats!
+La base recense les votes individuels de chaque État ayant siégé au Conseil de sécurité depuis sa création. Elle couvre les résolutions adoptées, celles rejetées faute de majorité, et celles bloquées par un veto.
 
-```sh
-# create a new project
-npx sv create my-app
-```
+L'interface propose trois modes d'exploration :
 
-To recreate this project with the same configuration:
+- **Browse** — tableau filtrable par pays, période et type de vote
+- **Trends** — visualisations chronologiques des votes d'un ou plusieurs États
+- **Compare** — comparaison directe des profils de vote entre États membres
 
-```sh
-# recreate this project
-pnpm dlx sv@0.15.3 create --template minimal --types jsdoc --add prettier eslint sveltekit-adapter="adapter:static" mcp="ide:claude-code+setup:remote" --install pnpm ./
-```
+Les données proviennent de la [Bibliothèque numérique des Nations Unies](https://digitallibrary.un.org/search?ln=en&cc=Security%20Council&p=&f=&rm=&ln=en&sf=&so=d&rg=100&c=Security%20Council&c=&of=hb&fti=0&fct__1=Voting%20Data&fct__2=Security%20Council&fti=0).
 
-## Developing
+## Citation
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+> "UNSC votes since 1946 Database", MARTIN, Benoît, 2026, données issues des Voting Data de la Bibliothèque numérique des Nations Unies.
 
-```sh
-npm run dev
+Licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
+## Stack technique
 
-## Building
+- [SvelteKit](https://kit.svelte.dev/) — framework frontend
+- [Observable Plot](https://observablehq.com/plot/) — visualisations
+- [`@sveltejs/adapter-static`](https://github.com/sveltejs/kit/tree/main/packages/adapter-static) — export en site statique
+- Déploiement via GitHub Actions → GitHub Pages
 
-To create a production version of your app:
+## Développement
 
 ```sh
-npm run build
+pnpm install
+pnpm dev
 ```
 
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+Le script `scripts/process-data.js` génère `static/data/votes.json` depuis le CSV source avant chaque build. Il est exécuté automatiquement par `pnpm dev` et `pnpm build`.
