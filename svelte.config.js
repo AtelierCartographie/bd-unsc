@@ -8,12 +8,8 @@ const config = {
 	},
 	kit: {
 		adapter: adapter({
-			fallback: 'index.html',
-			inlineStylesheets: 'always'
+			fallback: 'index.html'
 		}),
-		output: {
-			bundleStrategy: 'inline'
-		},
 		paths: {
 			relative: true
 		},
