@@ -16,7 +16,7 @@ Les données proviennent de la [Bibliothèque numérique des Nations Unies](http
 
 ## Citation
 
-> "UNSC votes since 1946 Database", MARTIN, Benoît, 2026, données issues des Voting Data de la Bibliothèque numérique des Nations Unies.
+> "UNSC votes since 1946 Database", MARTIN, Benoît, 2026, data.sciencespo, V1. Atelier de cartographie de Sciences Po/Groupe de recherche sur l'action multilatérale (GRAM).
 
 Licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
