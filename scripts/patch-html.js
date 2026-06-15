@@ -8,11 +8,17 @@
  *
  * Fix: inject a small script that runs before SvelteKit and overrides the
  * URL constructor so .pathname always returns '/' on file:// protocol.
+ *
+ * Also inlines the favicon as a data URI: the fallback page references it with
+ * an absolute /favicon.svg path that doesn't resolve under file://, so without
+ * this the page is the only file the user needs to keep.
  */
 
-import { readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { dirname, join } from 'path';
 
-const htmlPath = 'build/index.html';
+// Path defaults to the offline build output; override with `node patch-html.js <path>`.
+const htmlPath = process.argv[2] || 'build-offline/index.html';
 let html = readFileSync(htmlPath, 'utf-8');
 
 const patch = `<script>
@@ -44,5 +50,13 @@ if (firstScript === -1) {
 }
 
 html = html.slice(0, firstScript) + patch + '\n' + html.slice(firstScript);
+
+// Inline the favicon as a data URI so no external file is needed.
+const faviconPath = join(dirname(htmlPath), 'favicon.svg');
+if (existsSync(faviconPath)) {
+	const dataUri = 'data:image/svg+xml;base64,' + readFileSync(faviconPath).toString('base64');
+	html = html.replace(/href="[^"]*favicon\.svg"/g, `href="${dataUri}"`);
+}
+
 writeFileSync(htmlPath, html);
-console.log('index.html patched for file:// protocol');
+console.log(`${htmlPath} patched for file:// protocol`);

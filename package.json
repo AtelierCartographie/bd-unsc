@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "node scripts/process-data.js && vite dev",
 		"build": "node scripts/process-data.js && vite build",
+		"build:offline": "node scripts/process-data.js && INLINE=1 vite build && node scripts/patch-html.js",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json",
