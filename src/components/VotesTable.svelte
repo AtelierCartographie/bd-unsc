@@ -179,7 +179,11 @@
 					<th class="col-title">Title</th>
 					{#if showCountryCols}
 						{#each activeCountryCols as col (col)}
-							<th class="col-country" class:col-p5={P5.includes(col)} title={formatCountryName(col)}>
+							<th
+								class="col-country"
+								class:col-p5={P5.includes(col)}
+								title={formatCountryName(col)}
+							>
 								{#if P5.includes(col)}
 									<span class="p5-dot"></span>
 								{/if}
@@ -236,7 +240,11 @@
 		</table>
 	</div>
 	{#if showCountryCols}
-		<div class="edge-shadow edge-shadow-left" class:visible={canScrollLeft} aria-hidden="true"></div>
+		<div
+			class="edge-shadow edge-shadow-left"
+			class:visible={canScrollLeft}
+			aria-hidden="true"
+		></div>
 		<div
 			class="edge-shadow edge-shadow-right"
 			class:visible={canScrollRight}

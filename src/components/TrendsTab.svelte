@@ -4,12 +4,7 @@
 	import PlotComponent from './PlotComponent.svelte';
 	import ChartExport from './ChartExport.svelte';
 	import { MONTHS, MONTH_MIN, MONTH_MAX, monthToYM, monthLabel, monthToYear } from '$lib/time.js';
-	import {
-		OUTCOME_ORDER,
-		OUTCOME_COLORS,
-		OUTCOME_LABELS,
-		ADOPTED_KEYS
-	} from '$lib/outcomes.js';
+	import { OUTCOME_ORDER, OUTCOME_COLORS, OUTCOME_LABELS, ADOPTED_KEYS } from '$lib/outcomes.js';
 	import {
 		PLOT_STYLE,
 		PLOT_MARGIN_LEFT,

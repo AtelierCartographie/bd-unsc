@@ -28,7 +28,8 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 // Same stack as the page (`html` in +layout.svelte). The embedded @font-face
 // supplies the first family; the rest are fallbacks should embedding ever fail.
-const FONT_STACK = "'Atkinson Hyperlegible Next Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+const FONT_STACK =
+	"'Atkinson Hyperlegible Next Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const MEASURE_FAMILY = "'Atkinson Hyperlegible Next Variable', system-ui, sans-serif";
 
 // Mirror the page palette (+layout.svelte :root). The export is light-theme only.
@@ -74,15 +75,16 @@ async function fetchAsBase64(url) {
  */
 function getFontFaceCss() {
 	if (!fontCssPromise) {
-		fontCssPromise = Promise.all([fetchAsBase64(latinWoff2Url), fetchAsBase64(latinExtWoff2Url)]).then(
-			([latin, ext]) => {
-				const face = (/** @type {string} */ b64, /** @type {string} */ range) =>
-					`@font-face{font-family:'Atkinson Hyperlegible Next Variable';font-style:normal;` +
-					`font-weight:200 800;src:url(data:font/woff2;base64,${b64}) format('woff2');` +
-					`unicode-range:${range};}`;
-				return face(latin, LATIN_RANGE) + face(ext, LATIN_EXT_RANGE);
-			}
-		);
+		fontCssPromise = Promise.all([
+			fetchAsBase64(latinWoff2Url),
+			fetchAsBase64(latinExtWoff2Url)
+		]).then(([latin, ext]) => {
+			const face = (/** @type {string} */ b64, /** @type {string} */ range) =>
+				`@font-face{font-family:'Atkinson Hyperlegible Next Variable';font-style:normal;` +
+				`font-weight:200 800;src:url(data:font/woff2;base64,${b64}) format('woff2');` +
+				`unicode-range:${range};}`;
+			return face(latin, LATIN_RANGE) + face(ext, LATIN_EXT_RANGE);
+		});
 	}
 	return fontCssPromise;
 }
@@ -263,9 +265,7 @@ async function buildMasterSvg(data) {
 				rowTop += ROW_H;
 			}
 			nodes.push(svgRect(x, rowTop + (ROW_H - SW) / 2, SW, SW, item.color, 3, 'rgba(0,0,0,0.08)'));
-			nodes.push(
-				svgText(item.label, x + SW + GAP_SL, rowTop + 13, { size: 13, fill: COLOR_TEXT })
-			);
+			nodes.push(svgText(item.label, x + SW + GAP_SL, rowTop + 13, { size: 13, fill: COLOR_TEXT }));
 			x += itemW + GAP_ITEM;
 		}
 		y = rowTop + ROW_H + 14;
@@ -367,7 +367,10 @@ function rasterize(xml, width, height, scale) {
 			ctx.fillRect(0, 0, canvas.width, canvas.height);
 			ctx.setTransform(scale, 0, 0, scale, 0, 0);
 			ctx.drawImage(img, 0, 0);
-			canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('toBlob failed'))), 'image/png');
+			canvas.toBlob(
+				(blob) => (blob ? resolve(blob) : reject(new Error('toBlob failed'))),
+				'image/png'
+			);
 		};
 		img.onerror = () => reject(new Error('Failed to render SVG for rasterisation'));
 		img.src = dataUrl;

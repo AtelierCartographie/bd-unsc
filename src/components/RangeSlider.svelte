@@ -1,5 +1,18 @@
 <script>
-	const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+	const MONTHS = [
+		'Jan',
+		'Feb',
+		'Mar',
+		'Apr',
+		'May',
+		'Jun',
+		'Jul',
+		'Aug',
+		'Sep',
+		'Oct',
+		'Nov',
+		'Dec'
+	];
 
 	/** @type {{ from?: number, to?: number, granularity?: 'month' | 'year' }} */
 	let { from = $bindable(0), to = $bindable(959), granularity = 'month' } = $props();
@@ -50,7 +63,7 @@
 			class="thumb"
 			style="z-index:{fromZ}"
 			aria-label={granularity === 'year' ? 'Start year' : 'Start month'}
-			oninput={(e) => applyFrom(+(/** @type {HTMLInputElement} */ (e.currentTarget)).value)}
+			oninput={(e) => applyFrom(+/** @type {HTMLInputElement} */ (e.currentTarget).value)}
 		/>
 		<input
 			type="range"
@@ -61,7 +74,7 @@
 			class="thumb"
 			style="z-index:{toZ}"
 			aria-label={granularity === 'year' ? 'End year' : 'End month'}
-			oninput={(e) => applyTo(+(/** @type {HTMLInputElement} */ (e.currentTarget)).value)}
+			oninput={(e) => applyTo(+/** @type {HTMLInputElement} */ (e.currentTarget).value)}
 		/>
 	</div>
 	<div class="labels">

@@ -1,13 +1,7 @@
 // Country helpers shared across tabs.
 
 /** The five permanent members of the Security Council. */
-export const P5 = [
-	'CHINA',
-	'FRANCE',
-	'RUSSIAN FEDERATION/USSR',
-	'UNITED KINGDOM',
-	'UNITED STATES'
-];
+export const P5 = ['CHINA', 'FRANCE', 'RUSSIAN FEDERATION/USSR', 'UNITED KINGDOM', 'UNITED STATES'];
 
 /** Overrides for names that shouldn't be derived from the raw dataset value. */
 export const COUNTRY_DISPLAY_NAMES = /** @type {Record<string, string>} */ ({
