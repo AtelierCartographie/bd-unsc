@@ -7,10 +7,29 @@ import { OUTCOME_ORDER, OUTCOME_COLORS } from './outcomes.js';
 export const PLOT_STYLE = { fontFamily: 'inherit', fontSize: '12px' };
 
 /** Source credit shown under every chart (and baked into exports). */
-export const CHART_SOURCE = 'Source : UNSC Votes Since 1946 Database, v.1 (2026)';
+export const CHART_SOURCE =
+	'Source : UNSC Votes Since 1946 Database, v.1 (2026), doi.org/10.21410/7E4/Z0KECE';
 
 /** Left margin shared by all charts (room for the y-axis labels). */
 export const PLOT_MARGIN_LEFT = 50;
+
+/**
+ * Pick a round, integer tick step for a 0…maxAbs axis. Snaps to the 1·2·5·10…
+ * sequence so ticks read 0/10/20 rather than 0/23/46, while staying integer
+ * (the count axes can't show a fraction of a vote). Aims for ~3 intervals.
+ *
+ * @param {number} maxAbs largest absolute value the axis must reach
+ * @returns {number} a positive integer step
+ */
+export function niceIntStep(maxAbs) {
+	const target = Math.max(1, maxAbs / 3);
+	const pow = Math.pow(10, Math.floor(Math.log10(target)));
+	for (const m of [1, 2, 5, 10]) {
+		const step = m * pow;
+		if (step >= target) return Math.max(1, Math.round(step));
+	}
+	return Math.max(1, Math.round(10 * pow));
+}
 
 /** Colour scale mapping outcomes → their canonical colours. */
 export const OUTCOME_COLOR_SCALE = {

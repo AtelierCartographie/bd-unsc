@@ -31,7 +31,7 @@ export const VOTE_CATEGORIES = [
 	{ key: 'abstention', label: 'Abstention', color: '#ECB2C5' },
 	{ key: 'no', label: 'No', color: '#D84D86' },
 	{ key: 'veto', label: 'Veto', color: '#8B1A4F' },
-	{ key: 'nonParticipation', label: 'Non voting', color: '#C8C8CC' }
+	{ key: 'nonParticipation', label: 'Non voting', color: '#94949C' }
 ];
 
 /** Category keys in canonical order. */

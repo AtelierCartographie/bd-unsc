@@ -60,6 +60,13 @@
 	function reset() {
 		selected = defaultSelected ? new Set(defaultSelected) : new Set();
 	}
+
+	// Empty the selection. On the Compare tab this is distinct from "Reset":
+	// it lets the user start from scratch rather than from the default ten
+	// countries (creator's remark #5).
+	function clearAll() {
+		selected = new Set();
+	}
 </script>
 
 <div class="country-filter" bind:this={rootEl}>
@@ -87,6 +94,9 @@
 			<div class="dropdown-actions">
 				<button onclick={selectAll}>Select all</button>
 				<button onclick={reset}>{defaultSelected ? 'Reset' : 'Clear'}</button>
+				{#if defaultSelected}
+					<button onclick={clearAll}>Clear all</button>
+				{/if}
 			</div>
 			<div class="country-list" role="listbox" aria-multiselectable="true">
 				{#if groups.p5.length > 0}

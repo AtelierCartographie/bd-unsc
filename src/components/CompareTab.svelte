@@ -16,7 +16,7 @@
 		OPPOSITION_KEYS,
 		classifyVote
 	} from '$lib/votes-individual.js';
-	import { PLOT_STYLE, buildXMarks, CHART_SOURCE } from '$lib/plot.js';
+	import { PLOT_STYLE, buildXMarks, CHART_SOURCE, niceIntStep } from '$lib/plot.js';
 
 	/** @typedef {import('$lib/types.js').Vote} Vote */
 
@@ -139,7 +139,15 @@
 				if (cat === null) continue; // unrecorded historical vote — dropped
 				let s = map.get(country);
 				if (!s) {
-					s = { total: 0, gravSum: 0, gravN: 0, oppGravSum: 0, oppGravN: 0, byCat: {}, byPeriod: new Map() };
+					s = {
+						total: 0,
+						gravSum: 0,
+						gravN: 0,
+						oppGravSum: 0,
+						oppGravN: 0,
+						byCat: {},
+						byPeriod: new Map()
+					};
 					map.set(country, s);
 				}
 				s.total += 1;
@@ -229,7 +237,7 @@
 		}
 		const variant = chronoMode === 'opposition' ? 'opposition only' : 'all votes';
 		const stepLabel = timeStep === 'annual' ? 'annual' : 'monthly';
-		return `Individual votes by State over time, ${range} (${stepLabel}, ${variant})`;
+		return `Individual votes by State, ${range} (${stepLabel}, ${variant})`;
 	});
 
 	// ── Rendering ──
@@ -244,7 +252,9 @@
 	function revealTable() {
 		showTable = true;
 		// Wait for the table to render before scrolling to it.
-		requestAnimationFrame(() => matchTableEl?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+		requestAnimationFrame(() =>
+			matchTableEl?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+		);
 	}
 
 	const canExport = $derived(!!plotSvg);
@@ -256,7 +266,7 @@
 		const legend = VOTE_ORDER.filter(
 			(cat) => chronoMode !== 'opposition' || OPPOSITION_KEYS.includes(cat)
 		).map((cat) => ({ color: VOTE_COLORS[cat], label: VOTE_LABELS[cat] }));
-		legend.push({ color: '#ededf0', label: 'Not on the council' });
+		legend.push({ color: '#f5f5f7', label: 'State not seating' });
 		return {
 			title: chartTitle,
 			legend,
@@ -363,7 +373,10 @@
 		yMin = Math.min(0, Math.floor(yMin));
 
 		const maxAbs = Math.max(1, yMax, -yMin);
-		const tickStep = Math.max(1, Math.round(maxAbs / 2));
+		// Round, human-friendly tick step: snap to 1·2·5·10… so the axis reads
+		// 0/10/20 rather than 0/23/46 (creator's remark — ticks weren't round).
+		// Ticks stay integers ("you can't cast half a vote").
+		const tickStep = niceIntStep(maxAbs);
 		/** @type {number[]} */
 		const yTicks = [];
 		for (let t = 0; t <= yMax + 1e-9; t += tickStep) yTicks.push(t);
@@ -412,7 +425,8 @@
 						start = null;
 					}
 				}
-				if (start !== null) bands.push({ country: c, x1: monthDate(start), x2: monthDate(toMonth + 1) });
+				if (start !== null)
+					bands.push({ country: c, x1: monthDate(start), x2: monthDate(toMonth + 1) });
 			}
 		}
 
@@ -424,7 +438,16 @@
 				Votes: { value: (/** @type {any} */ d) => d.count }
 			},
 			tip: {
-				format: { x: false, x1: false, x2: false, y: false, y1: false, y2: false, fill: false }
+				format: {
+					x: false,
+					x1: false,
+					x2: false,
+					y: false,
+					y1: false,
+					y2: false,
+					fill: false,
+					fy: false
+				}
 			}
 		};
 
@@ -448,7 +471,7 @@
 					x2: 'x2',
 					y1: yMin,
 					y2: yMax,
-					fill: '#ededf0',
+					fill: '#f5f5f7',
 					pointerEvents: 'none'
 				}),
 				Plot.gridY({ ticks: yTicks, strokeDasharray: '0.75,2', strokeOpacity: 1, insetLeft: -30 }),
@@ -530,7 +553,8 @@
 				{filtered.length.toLocaleString('en')} of {votes.length.toLocaleString('en')} votes
 				{#if search.trim()}
 					<br />
-					<button type="button" class="inline-link" onclick={revealTable}>see the list below</button>
+					<button type="button" class="inline-link" onclick={revealTable}>see the list below</button
+					>
 				{/if}
 			</p>
 		</div>
@@ -600,7 +624,7 @@
 			{/each}
 			<div class="legend-item">
 				<span class="legend-swatch legend-swatch-absence"></span>
-				<span class="legend-label">Not on the council</span>
+				<span class="legend-label">State not seating</span>
 			</div>
 		</div>
 	</aside>
@@ -825,7 +849,7 @@
 	}
 
 	.legend-swatch-absence {
-		background: #ededf0;
+		background: #f5f5f7;
 	}
 
 	@media (max-width: 768px) {
