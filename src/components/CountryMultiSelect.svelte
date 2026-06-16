@@ -77,7 +77,7 @@
 		aria-expanded={open}
 		aria-haspopup="listbox"
 	>
-		{selected.size === 0 ? 'All countries' : `${selected.size} selected`}
+		{#if selected.size > 0}{selected.size} selected{:else if defaultSelected}No country{:else}All countries{/if}
 		<span class="chevron" class:open>&#x25BE;</span>
 	</button>
 

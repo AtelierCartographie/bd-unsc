@@ -100,12 +100,10 @@
 		});
 	});
 
-	// Countries to display as facets: the explicit selection, or everything
-	// available when nothing is selected (same convention as the Browse tab).
-	const displaySet = $derived.by(() => {
-		if (selectedCountries.size > 0) return selectedCountries;
-		return availableCountries;
-	});
+	// Countries to display as facets: exactly the user's selection. An empty
+	// selection means "no country" — the chart stays empty and prompts the user
+	// to pick some (distinct from the default ten, which "Reset" restores).
+	const displaySet = $derived(selectedCountries);
 
 	/**
 	 * Per-country aggregation in a single pass.
@@ -638,6 +636,8 @@
 			<div class="chart-scroll">
 				<PlotComponent svgElement={plotSvg} />
 			</div>
+		{:else if selectedCountries.size === 0}
+			<p class="empty-msg">Select one or more countries to display the chart.</p>
 		{:else}
 			<p class="empty-msg">No votes match the current filters.</p>
 		{/if}
