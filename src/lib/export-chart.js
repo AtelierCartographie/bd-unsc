@@ -217,6 +217,7 @@ function prepareChartClone(src, x, y, w, h) {
 /**
  * @typedef {Object} ExportData
  * @property {string} title
+ * @property {string} [subtitle] - optional line under the title (e.g. active topic filter)
  * @property {{ color: string, label: string }[]} legend
  * @property {ChartPiece[]} charts
  * @property {string} source
@@ -246,7 +247,17 @@ async function buildMasterSvg(data) {
 		nodes.push(svgText(line, PAD, y + 15 * 0.8, { size: 15, weight: 600, fill: COLOR_TEXT }));
 		y += 20;
 	}
-	y += 10;
+	y += 4;
+
+	// Subtitle — e.g. the active topic filter. 13px / muted.
+	if (data.subtitle) {
+		ctx.font = `400 13px ${MEASURE_FAMILY}`;
+		for (const line of wrapText(ctx, data.subtitle, contentW)) {
+			nodes.push(svgText(line, PAD, y + 13 * 0.8, { size: 13, fill: COLOR_MUTED }));
+			y += 18;
+		}
+	}
+	y += 6;
 
 	// Legend — horizontal swatches that wrap to new rows when they run past the width.
 	if (data.legend.length) {
@@ -381,9 +392,18 @@ function rasterize(xml, width, height, scale) {
  * Build the composite chart image and trigger a download.
  * @param {ExportData & { filename: string, format: 'png' | 'svg', scale?: number }} opts
  */
-export async function exportChart({ title, legend, charts, source, filename, format, scale = 2 }) {
+export async function exportChart({
+	title,
+	subtitle,
+	legend,
+	charts,
+	source,
+	filename,
+	format,
+	scale = 2
+}) {
 	if (!charts?.length) return; // nothing rendered yet
-	const { svg, width, height } = await buildMasterSvg({ title, legend, charts, source });
+	const { svg, width, height } = await buildMasterSvg({ title, subtitle, legend, charts, source });
 	const xml = serialize(svg);
 
 	if (format === 'svg') {

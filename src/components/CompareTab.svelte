@@ -238,6 +238,13 @@
 		return `Individual votes by State, ${range} (${stepLabel}, ${variant})`;
 	});
 
+	// Sub-heading describing the active topic filter, shown in the UI and the export.
+	const chartSubtitle = $derived.by(() => {
+		const q = search.trim();
+		if (!q) return '';
+		return `Topic: “${q}” (${filtered.length.toLocaleString('en')} votes)`;
+	});
+
 	// ── Rendering ──
 	/** @type {HTMLDivElement | null} */
 	let wrapperEl = $state(null);
@@ -267,6 +274,7 @@
 		legend.push({ color: '#f5f5f7', label: 'State not seating' });
 		return {
 			title: chartTitle,
+			subtitle: chartSubtitle,
 			legend,
 			charts: plotSvg ? [{ svg: /** @type {SVGSVGElement} */ (plotSvg) }] : [],
 			source: CHART_SOURCE
@@ -629,7 +637,12 @@
 
 	<div class="chart-area" bind:this={wrapperEl}>
 		<div class="chart-header">
-			<h2 class="chart-title">{chartTitle}</h2>
+			<div class="chart-heading">
+				<h2 class="chart-title">{chartTitle}</h2>
+				{#if chartSubtitle}
+					<p class="chart-subtitle">{chartSubtitle}</p>
+				{/if}
+			</div>
 			<ChartExport filename="unsc-compare" getData={exportData} disabled={!canExport} />
 		</div>
 		{#if plotSvg}
@@ -688,11 +701,24 @@
 		margin-bottom: 0.5rem;
 	}
 
+	.chart-heading {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+
 	.chart-title {
 		font-size: 0.95rem;
 		font-weight: 600;
 		line-height: 1.3;
 		color: var(--text);
+		margin: 0;
+	}
+
+	.chart-subtitle {
+		font-size: 0.8rem;
+		line-height: 1.3;
+		color: var(--text-muted);
 		margin: 0;
 	}
 
